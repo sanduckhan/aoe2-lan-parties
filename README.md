@@ -23,13 +23,21 @@ This project analyzes Age of Empires II recorded game files (typically from LAN 
 
 ## Directory Structure
 
--   `recorded_games/`: Place your `.aoe2record` (or other supported replay) files in this directory.
--   `parsed_games/`: This directory is used by `parse_single_game.py` to store JSON versions of individual parsed replays if you run that script manually. The main `analyze_games.py` script processes replays directly from `recorded_games/` and does not write to this directory during its standard analysis. 
--   `analyze_games.py`: The main script to run the full analysis and generate the report.
--   `parse_single_game.py`: A command-line utility to parse a single AoE2 replay file. It takes input and output file paths as arguments, uses `mgz.model.parse_match` and `mgz.model.serialize` to process the replay, and saves the structured data as a JSON file. This script is useful for manually parsing individual replay files for debugging or specific analysis.
--   `pyproject.toml`: Poetry configuration file.
--   `display_game_results.py`: Iterates through game replay files in `recorded_games/`, parses each, and prints a game-by-game summary identifying winning and losing players for each match.
--   `debug_summary_output.py`: Processes the first replay file found in `recorded_games/` using `mgz.summary.Summary`. It then converts the entire `Summary` object into a detailed JSON dump (handling complex/circular objects) and writes it to `debug_summary_output.json`. This is useful for deep inspection of the raw `Summary` data structure.
+-   `main.py`: The main entry point script. Run this to perform the full analysis and generate the report.
+-   `analyzer_lib/`: This directory forms the core Python package for the analyzer.
+    -   `__init__.py`: Makes `analyzer_lib` a Python package.
+    -   `analyze_games.py`: Contains the primary logic for parsing replay files, processing game data, and aggregating statistics.
+    -   `report_generator.py`: Responsible for formatting and printing the final analytics report to the console.
+    -   `config.py`: Stores configuration constants such as the path to replay files, player aliases, and lists of crucial upgrades or non-military units.
+-   `scripts/`: Contains various utility and standalone scripts.
+    -   `parse_single_game.py`: A command-line utility to parse a single AoE2 replay file and save its structured data as a JSON file. Useful for debugging or detailed inspection of one game. (Original path: root)
+    -   `display_game_results.py`: Iterates through game replay files in `recorded_games/`, parses each, and prints a game-by-game summary identifying winning and losing players. (Original path: root)
+    -   `debug_summary_output.py`: Processes a replay file using `mgz.summary.Summary` and dumps the entire `Summary` object to a JSON file for deep inspection of its raw data structure. (Original path: root)
+    -   `parse.py`: A script to parse all replay files in the `recorded_games/` directory and save each as a separate JSON file in the `parsed_games/` directory. (Original path: root)
+-   `recorded_games/`: Place your `.aoe2record` (or other supported replay) files in this directory. This is the primary input for `main.py`.
+-   `parsed_games/`: This directory can be used by scripts like `scripts/parse_single_game.py` or `scripts/parse.py` to store JSON versions of individual parsed replays. The main analysis via `main.py` processes replays directly from `recorded_games/` in memory.
+-   `pyproject.toml`: Poetry configuration file, defining project metadata and dependencies.
+-   `requirements.txt`: Standard Python requirements file, typically generated from `poetry.lock` for environments where Poetry is not used.
 
 ## Usage
 
@@ -40,9 +48,9 @@ This project analyzes Age of Empires II recorded game files (typically from LAN 
     Activate the Poetry virtual environment and run the main analysis script:
     ```bash
     poetry shell
-    python analyze_games.py
+    python main.py
     ```
-    The script will process each replay directly from the `recorded_games/` directory, parse it in memory, and then print a consolidated analytics report to the console.
+    The script (`main.py`) will orchestrate the parsing of each replay from the `recorded_games/` directory (using `analyzer_lib.analyze_games`), generate statistics, and then print a consolidated analytics report to the console (using `analyzer_lib.report_generator`).
 
 ## Awards Implemented
 
