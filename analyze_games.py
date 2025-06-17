@@ -1,0 +1,519 @@
+import os
+from collections import defaultdict
+from datetime import timedelta
+
+NON_MILITARY_UNITS = {"Villager", "Fishing Ship"}
+from mgz.model import parse_match
+
+# --- Configuration ---
+RECORDED_GAMES_DIR = 'recorded_games'
+CRUCIAL_UPGRADES = sorted(["Loom", "Double-Bit Axe", "Wheelbarrow", "Horse Collar", "Bow Saw"])
+
+# --- Data Structures ---
+player_stats = defaultdict(lambda: {
+    'games_played': 0,
+    'games_for_win_rate': 0, # Games where a winner was determined
+    'wins': 0,
+    'total_playtime_seconds': 0,
+    'civs_played': defaultdict(int),
+    'civ_wins': defaultdict(int),
+    'civ_losses': defaultdict(int),
+    'civ_games_for_win_rate': defaultdict(int), # Civ games where a winner was determined
+    'units_created': defaultdict(int),
+    'total_units_created': 0,
+    'market_transactions': 0, # For 'The Market Mogul' award
+    'total_resource_units_traded': 0, # Sum of Food, Wood, Stone bought/sold
+    'wall_segments_built': 0,
+    'buildings_deleted': 0,
+    'crucial_researched': defaultdict(int), # For 'Most Likely to Forget Upgrade' award
+})
+
+game_stats = {
+    'total_games': 0,
+    'total_duration_seconds': 0,
+    'longest_game': {'duration_seconds': 0, 'file': ''},
+    'overall_civ_picks': defaultdict(int),
+    'total_units_created_overall': 0, # Added missing key
+    'team_matchups': defaultdict(lambda: {'rosters': (), 'wins_A': 0, 'wins_B': 0}),
+    'awards': {
+        'favorite_unit_fanatic': defaultdict(lambda: {'unit': 'N/A', 'count': 0}),
+        'bitter_salt_baron': {'player': None, 'streak': 0},
+        'market_mogul': {'player': None, 'transactions': 0}
+    }
+}
+
+# --- Main Logic ---
+def analyze_all_games():
+    """Loops through recorded games, parses them, and aggregates stats."""
+    if not os.path.isdir(RECORDED_GAMES_DIR):
+        print(f"Error: Directory '{RECORDED_GAMES_DIR}' not found.")
+        return
+
+    print(f"--- Starting Analysis of Games in '{RECORDED_GAMES_DIR}' ---")
+    player_game_chronology = defaultdict(list) # To store game results chronologically per player
+
+    for filename in os.listdir(RECORDED_GAMES_DIR):
+        if not filename.endswith(('.aoe2record', '.mgz', '.mgx')):
+            continue
+
+        file_path = os.path.join(RECORDED_GAMES_DIR, filename)
+        print(f"Analyzing: {filename}")
+
+        try:
+            with open(file_path, 'rb') as f:
+                match = parse_match(f)
+
+            if not match:
+                print(f"  -> Skipping file {filename}: Could not find match data.")
+                continue
+
+            duration_seconds = match.duration.total_seconds()
+            human_players_from_match = [p for p in match.players if hasattr(p, 'profile_id') and p.profile_id is not None]
+            human_player_names_in_match = {p.name for p in human_players_from_match} # Define the set of human player names
+
+            # Filter out games shorter than 5 minutes (300 seconds)
+            if duration_seconds < 300:
+                print(f"  -> Skipping file {filename}: Game duration ({timedelta(seconds=int(duration_seconds))}) is less than 5 minutes.\n")
+                continue
+
+            # --- Aggregate Game Stats ---
+            game_stats['total_games'] += 1
+            game_stats['total_duration_seconds'] += duration_seconds
+            if duration_seconds > game_stats['longest_game']['duration_seconds']:
+                game_stats['longest_game']['duration_seconds'] = duration_seconds
+                game_stats['longest_game']['file'] = filename
+
+            # --- Determine Winning Team (to ensure consistency) ---
+            teams = defaultdict(list)
+            for p in human_players_from_match:
+                team_id = p.team_id
+                # The aoc-mgz library can return team_id as a list (e.g., [1]) instead of an integer.
+                # We normalize it to an integer to use it as a hashable dictionary key.
+                if isinstance(team_id, list):
+                    team_id = team_id[0] if team_id else -1 # Use first element or -1 for empty list
+                teams[team_id].append(p)
+            
+            winning_team_id = None
+            for team_id, players_in_team in teams.items():
+                if any(p.winner for p in players_in_team):
+                    winning_team_id = team_id
+                    break
+            
+            if winning_team_id is None and len(teams) > 1:
+                print(f"  -> WARNING: Could not determine a winner for {filename}. Win/loss stats will be skipped for this game.")
+
+            # --- Per-Player Stats and Chronology ---
+            for player in human_players_from_match:
+                player_name = player.name
+
+                # CRITICAL FIX: Normalize player's team_id before comparison, just as we did for the `teams` dictionary.
+                player_team_id = player.team_id
+                if isinstance(player_team_id, list):
+                    player_team_id = player_team_id[0] if player_team_id else -1
+                
+                is_winner = (player_team_id == winning_team_id)
+
+                player_stats[player_name]['games_played'] += 1
+                if winning_team_id is not None: # Game has a determined winner
+                    player_stats[player_name]['games_for_win_rate'] += 1
+                if is_winner:
+                    player_stats[player_name]['wins'] += 1
+                player_stats[player_name]['total_playtime_seconds'] += duration_seconds
+
+                civ_name = player.civilization
+                player_stats[player_name]['civs_played'][civ_name] += 1
+                game_stats['overall_civ_picks'][civ_name] += 1
+                if winning_team_id is not None: # Game has a determined winner
+                    player_stats[player_name]['civ_games_for_win_rate'][civ_name] += 1
+
+                if is_winner:
+                    player_stats[player_name]['civ_wins'][civ_name] += 1
+                else:
+                    player_stats[player_name]['civ_losses'][civ_name] += 1
+                
+                player_game_chronology[player_name].append({'won': is_winner, 'timestamp': match.timestamp})
+
+            # --- Team Matchup Stats ---
+            team_rosters = []
+            for team_id in sorted(teams.keys()):
+                player_names = sorted([p.name for p in teams[team_id]])
+                team_rosters.append(tuple(player_names))
+            
+            canonical_rosters = tuple(team_rosters)
+
+            if len(canonical_rosters) == 2 and winning_team_id is not None:
+                matchup_key = str(canonical_rosters) # Use a string representation as the key
+                team_A_id = next((tid for tid, players in teams.items() if tuple(sorted([p.name for p in players])) == canonical_rosters[0]), None)
+
+                if not game_stats['team_matchups'][matchup_key]['rosters']:
+                    game_stats['team_matchups'][matchup_key]['rosters'] = canonical_rosters
+
+                if winning_team_id == team_A_id:
+                    game_stats['team_matchups'][matchup_key]['wins_A'] += 1
+                else:
+                    game_stats['team_matchups'][matchup_key]['wins_B'] += 1
+
+            # --- Unit Creation Stats (from match.inputs) ---
+            player_number_to_name = {p.number: p.name for p in human_players_from_match}
+            crucial_techs_researched_this_game_by_player = defaultdict(set) # Tracks crucial techs researched by each player in THIS game
+            if hasattr(match, 'inputs') and match.inputs:
+                for input_action in match.inputs:
+                    # Ensure the key is always a string to prevent sorting errors with None
+                    input_type_name = str(getattr(input_action, 'type', 'N/A'))
+                    if input_type_name == 'Queue':
+                        player_number = getattr(getattr(input_action, 'player', None), 'number', None)
+                        payload = getattr(input_action, 'payload', {})
+                        unit_name = payload.get('unit')
+                        player_name = player_number_to_name.get(player_number)
+
+                        if unit_name and player_name and unit_name not in NON_MILITARY_UNITS:
+                            player_stats[player_name]['units_created'][unit_name] += 1
+                            player_stats[player_name]['total_units_created'] += 1
+                            game_stats['total_units_created_overall'] += 1
+
+                    # Check for Market Transactions (Buy/Sell)
+                    elif input_action.type in ['Buy', 'Sell']:
+                        action_player_name = None
+                        # In live Python objects, input_action.player is a Player object, not an int.
+                        # We need to get the name from the object.
+                        if hasattr(input_action, 'player') and input_action.player is not None:
+                            if hasattr(input_action.player, 'name'):
+                                potential_name = input_action.player.name
+                                # Check if this name is one of the human players we are tracking
+                                if potential_name in human_player_names_in_match:
+                                    action_player_name = potential_name
+                        
+                        if action_player_name: # If we successfully identified a tracked human player
+                            player_stats[action_player_name]['market_transactions'] += 1
+                            
+                            # Aggregate total units of Food, Wood, Stone traded
+                            payload = input_action.payload
+
+                            # Ensure payload is a dictionary and has the necessary keys
+                            if isinstance(payload, dict) and 'resource_id' in payload and 'amount' in payload:
+                                resource_id = payload['resource_id']
+                                amount = payload['amount']
+
+                                # Resource IDs: 0=Food, 1=Wood, 2=Stone, 3=Gold
+                                if resource_id in [0, 1, 2]: # Only count Food, Wood, Stone
+                                    player_stats[action_player_name]['total_resource_units_traded'] += amount
+
+                    elif input_action.type == 'Wall':
+                        if hasattr(input_action, 'player') and input_action.player is not None and hasattr(input_action.player, 'name'):
+                            action_player_name = input_action.player.name
+                            if action_player_name in human_player_names_in_match:
+                                player_stats[action_player_name]['wall_segments_built'] += 1
+
+                    elif input_action.type == 'Delete':
+                        if hasattr(input_action, 'player') and input_action.player is not None and hasattr(input_action.player, 'name'):
+                            action_player_name = input_action.player.name
+                            if action_player_name in human_player_names_in_match:
+                                player_stats[action_player_name]['buildings_deleted'] += 1
+
+                    elif input_action.type == 'Research':
+                        if hasattr(input_action, 'player') and input_action.player is not None and hasattr(input_action.player, 'name'):
+                            action_player_name = input_action.player.name
+                            if action_player_name in human_player_names_in_match:
+                                tech_name = getattr(input_action, 'param', None)
+                                if tech_name in CRUCIAL_UPGRADES:
+                                    # Only count if this player hasn't researched this specific crucial tech in this game yet
+                                    if tech_name not in crucial_techs_researched_this_game_by_player[action_player_name]:
+                                        crucial_techs_researched_this_game_by_player[action_player_name].add(tech_name)
+                                        player_stats[action_player_name]['crucial_researched'][tech_name] += 1
+
+        except Exception as e:
+            print(f"  -> Could not process file {filename}: {e}")
+    print(f"--- Analysis Complete ---")
+
+    # --- Calculate Losing Streaks --- 
+    print("--- Calculating Losing Streaks ---")
+    for player_name, games in player_game_chronology.items():
+        if not games: continue
+        # Sort games by timestamp to process in chronological order
+        sorted_games = sorted(games, key=lambda g: g['timestamp'])
+        current_streak = 0
+        max_streak = 0
+        for game in sorted_games:
+            if not game['won']:
+                current_streak += 1
+            else:
+                max_streak = max(max_streak, current_streak)
+                current_streak = 0
+        max_streak = max(max_streak, current_streak) # Final check for streak ending with last game
+        player_stats[player_name]['max_losing_streak'] = max_streak
+
+def print_report(player_stats, game_stats):
+    """Prints the final analytics report."""
+    print("\n--- Analysis Complete ---")
+    print("\nLAN Party Analytics Report")
+
+    # --- General Stats ---
+    print("\n--- General Game Statistics ---")
+    print(f"Total Games Analyzed: {game_stats['total_games']}")
+    if game_stats['total_games'] > 0:
+        avg_duration_seconds = game_stats['total_duration_seconds'] / game_stats['total_games']
+        avg_duration_str = str(timedelta(seconds=int(avg_duration_seconds)))
+        print(f"Average Game Duration: {avg_duration_str}")
+
+        longest_duration_str = str(timedelta(seconds=int(game_stats['longest_game']['duration_seconds'])))
+        longest_game_file = game_stats['longest_game']['file']
+        print(f"Longest Game: {longest_duration_str} (File: {longest_game_file})")
+
+    # --- Fun Facts & Awards ---
+    print("\n--- Fun Facts & Awards ---")
+    print("  - Favorite Unit Fanatic:")
+    excluded_units = ['Palisade Wall', 'Stone Wall', 'Farm', 'Villager', 'City Wall', 'Goat', 'Town Center', 'Sheep', 'City Gate']
+    for player_name, stats in player_stats.items():
+        if stats['units_created']:
+            # Filter out excluded units
+            filtered_units = {
+                unit: count for unit, count in stats['units_created'].items() 
+                if unit not in excluded_units
+            }
+            if filtered_units:
+                most_common_unit, count = max(filtered_units.items(), key=lambda item: item[1])
+                game_stats['awards']['favorite_unit_fanatic'][player_name] = {'unit': most_common_unit, 'count': count}
+                print(f"    - {player_name}: {most_common_unit} ({count} times)")
+            else:
+                game_stats['awards']['favorite_unit_fanatic'][player_name] = {'unit': 'N/A (Filtered)', 'count': 0}
+                print(f"    - {player_name}: N/A (Only created excluded units or no units)")
+        else:
+            game_stats['awards']['favorite_unit_fanatic'][player_name] = {'unit': 'N/A', 'count': 0}
+            print(f"    - {player_name}: N/A (No unit data)")
+
+    # Determine The Bitter Salt Baron (longest losing streak)
+    overall_longest_losing_streak = 0
+    salt_baron_player = None
+    for player_name, stats in player_stats.items():
+        if stats['max_losing_streak'] > overall_longest_losing_streak:
+            overall_longest_losing_streak = stats['max_losing_streak']
+            salt_baron_player = player_name
+        elif stats['max_losing_streak'] == overall_longest_losing_streak and overall_longest_losing_streak > 0:
+            # Handle ties by listing multiple players if necessary, or just pick one
+            if salt_baron_player:
+                salt_baron_player += f", {player_name}" # Append if already a tie
+            else:
+                salt_baron_player = player_name # First one in a tie
+
+    if salt_baron_player and overall_longest_losing_streak > 0:
+        game_stats['awards']['bitter_salt_baron'] = {'player': salt_baron_player, 'streak': overall_longest_losing_streak}
+        print(f"  - The Bitter Salt Baron: {salt_baron_player} with a streak of {overall_longest_losing_streak} losses.")
+    else:
+        print("  - The Bitter Salt Baron: N/A (No significant losing streaks found or everyone's a winner!)")
+
+    # --- Most Balanced Team Matchup ---
+    print("\n--- Most Balanced Team Matchup ---")
+    # Filter for matchups played at least 3 times for relevance
+    MIN_GAMES_FOR_BALANCE = 3
+    relevant_matchups = {
+        k: v for k, v in game_stats['team_matchups'].items() 
+        if (v['wins_A'] + v['wins_B']) >= MIN_GAMES_FOR_BALANCE
+    }
+
+    if not relevant_matchups:
+        # Try with a lower threshold if no matchups found
+        MIN_GAMES_FOR_BALANCE = 1
+        relevant_matchups = {
+            k: v for k, v in game_stats['team_matchups'].items() 
+            if (v['wins_A'] + v['wins_B']) >= MIN_GAMES_FOR_BALANCE
+        }
+
+    if not relevant_matchups:
+        print("  - Not enough team games played to determine a balanced matchup.")
+    else:
+        # Find the matchup with the smallest win difference, then most games played
+        most_balanced_matchup = min(
+            relevant_matchups.values(), 
+            key=lambda v: (abs(v['wins_A'] - v['wins_B']), -(v['wins_A'] + v['wins_B']))
+        )
+
+        team_A_roster = ', '.join(most_balanced_matchup['rosters'][0])
+        team_B_roster = ', '.join(most_balanced_matchup['rosters'][1])
+        wins_A = most_balanced_matchup['wins_A']
+        wins_B = most_balanced_matchup['wins_B']
+
+
+    # --- Most Balanced Team Matchup ---
+    # The 'most_balanced_matchup' variable is calculated above within the 'if relevant_matchups:' block.
+    # It will be None if no relevant_matchups were found.
+    print("\n--- Most Balanced Team Matchup ---")
+    if most_balanced_matchup:
+        team_A_roster = ', '.join(sorted(list(most_balanced_matchup['rosters'][0])))
+        team_B_roster = ', '.join(sorted(list(most_balanced_matchup['rosters'][1])))
+        wins_A = most_balanced_matchup['wins_A']
+        wins_B = most_balanced_matchup['wins_B']
+        print(f"  - Matchup: [{team_A_roster}] vs [{team_B_roster}]")
+        print(f"  - Head-to-head: {wins_A} - {wins_B}")
+        print(f"  - Total Games: {wins_A + wins_B}")
+    else:
+        print("  Not enough team games played with consistent rosters to determine a balanced matchup.")
+
+    # --- AWARDS SECTION ---
+    # Announce "The Wall Street Tycoon" award winner(s)
+    if player_stats:
+        unique_wall_counts = sorted(list(set(s['wall_segments_built'] for s in player_stats.values() if s['wall_segments_built'] > 0)), reverse=True)
+        
+        if unique_wall_counts:
+            max_walls = unique_wall_counts[0]
+            winners = [p for p, s in player_stats.items() if s['wall_segments_built'] == max_walls]
+            print("\n--- \"The Wall Street Tycoon\" Award ---")
+            if len(winners) > 1:
+                print(f"A tie for first place: {', '.join(winners)} with {max_walls} wall sections built each!")
+            else:
+                print(f"Winner: {winners[0]} with {max_walls} wall sections built!")
+
+            if len(unique_wall_counts) > 1:
+                second_max_walls = unique_wall_counts[1]
+                runners_up = [p for p, s in player_stats.items() if s['wall_segments_built'] == second_max_walls]
+                if runners_up:
+                    if len(runners_up) > 1:
+                        print(f"  - Second place (tie): {', '.join(runners_up)} with {second_max_walls} each.")
+                    else:
+                        print(f"  - Second place: {runners_up[0]} with {second_max_walls}.")
+
+    # Announce "The Demolition Expert" award winner(s)
+    if player_stats:
+        unique_delete_counts = sorted(list(set(s['buildings_deleted'] for s in player_stats.values() if s['buildings_deleted'] > 0)), reverse=True)
+
+        if unique_delete_counts:
+            max_deletes = unique_delete_counts[0]
+            winners = [p for p, s in player_stats.items() if s['buildings_deleted'] == max_deletes]
+            print("\n--- \"The Demolition Expert\" Award ---")
+            if len(winners) > 1:
+                print(f"A tie for first place: {', '.join(winners)} with {max_deletes} buildings deleted each!")
+            else:
+                print(f"Winner: {winners[0]} with {max_deletes} buildings deleted!")
+
+            if len(unique_delete_counts) > 1:
+                second_max_deletes = unique_delete_counts[1]
+                runners_up = [p for p, s in player_stats.items() if s['buildings_deleted'] == second_max_deletes]
+                if runners_up:
+                    if len(runners_up) > 1:
+                        print(f"  - Second place (tie): {', '.join(runners_up)} with {second_max_deletes} each.")
+                    else:
+                        print(f"  - Second place: {runners_up[0]} with {second_max_deletes}.")
+
+    # Announce "The Market Mogul" award winner(s)
+    if player_stats:
+        unique_transaction_counts = sorted(list(set(s['market_transactions'] for s in player_stats.values() if s['market_transactions'] > 0)), reverse=True)
+
+        if unique_transaction_counts:
+            max_transactions = unique_transaction_counts[0]
+            winners = [(p, s.get('total_resource_units_traded', 0)) for p, s in player_stats.items() if s['market_transactions'] == max_transactions]
+            print("\n--- \"The Market Mogul\" Award ---")
+            if len(winners) > 1:
+                details = [f"{name} ({player_stats[name]['market_transactions']} transactions, {traded:,} units)" for name, traded in winners]
+                print(f"A tie for first place: {', '.join(details)}")
+            else:
+                winner_name, units_traded = winners[0]
+                print(f"Winner: {winner_name} with {max_transactions} transactions, trading a total of {units_traded:,} resource units.")
+
+            if len(unique_transaction_counts) > 1:
+                second_max_transactions = unique_transaction_counts[1]
+                runners_up = [(p, s.get('total_resource_units_traded', 0)) for p, s in player_stats.items() if s['market_transactions'] == second_max_transactions]
+                if runners_up:
+                    if len(runners_up) > 1:
+                        details = [f"{name} ({second_max_transactions} transactions, {traded:,} units)" for name, traded in runners_up]
+                        print(f"  - Second place (tie): {', '.join(details)}.")
+                    else:
+                        runner_up_name, units_traded = runners_up[0]
+                        print(f"  - Second place: {runner_up_name} with {second_max_transactions} transactions, trading {units_traded:,} units.")
+    # Removed the 'else' for no market transactions as it's handled by unique_transaction_counts check
+
+    # "Most Likely to Forget Crucial Upgrades" Award
+    if player_stats:
+        forgetful_players_data = []
+        for player_name, stats in player_stats.items():
+            games_played = stats['games_played']
+            if games_played == 0:
+                continue
+
+            total_forget_percentage_sum = 0.0
+            num_crucial_upgrades = len(CRUCIAL_UPGRADES)
+            individual_forget_details = {}
+
+            for tech_name in CRUCIAL_UPGRADES:
+                researched_count = stats['crucial_researched'].get(tech_name, 0)
+                not_researched_count = games_played - researched_count
+                forget_percentage_for_ranking = (not_researched_count / games_played) * 100
+                researched_percentage_for_details = (researched_count / games_played) * 100
+                total_forget_percentage_sum += forget_percentage_for_ranking
+                individual_forget_details[tech_name] = researched_percentage_for_details
+            
+            average_forget_percentage = total_forget_percentage_sum / num_crucial_upgrades if num_crucial_upgrades > 0 else 0
+            forgetful_players_data.append({
+                'name': player_name, 
+                'avg_forget': average_forget_percentage, 
+                'details': individual_forget_details
+            })
+
+        # Sort by average forgetfulness, descending
+        forgetful_players_data.sort(key=lambda x: x['avg_forget'], reverse=True)
+
+        if forgetful_players_data:
+            print("\n--- \"Most Likely to Forget Crucial Upgrades\" Award ---")
+            # Winner
+            winner = forgetful_players_data[0]
+            winner_details_str = ", ".join([f"{tech}: {winner['details'][tech]:.0f}%" for tech in CRUCIAL_UPGRADES])
+            print(f"Winner: {winner['name']} (Average Forgetfulness: {winner['avg_forget']:.1f}%)")
+            print(f"  - Details: {winner_details_str} of games.")
+
+            # Runner-up
+            if len(forgetful_players_data) > 1:
+                runner_up = forgetful_players_data[1]
+                # Check if runner-up score is different from winner to avoid showing same person or 0% forgetfulness as runner-up if only one person forgot anything
+                if runner_up['avg_forget'] < winner['avg_forget'] and runner_up['avg_forget'] > 0:
+                    runner_up_details_str = ", ".join([f"{tech}: {runner_up['details'][tech]:.0f}%" for tech in CRUCIAL_UPGRADES])
+                    print(f"  - Second place: {runner_up['name']} (Average Forgetfulness: {runner_up['avg_forget']:.1f}%)")
+                    print(f"    - Details: {runner_up_details_str} of games.")
+
+    # --- Player Leaderboard ---
+    print("\n--- Player Leaderboard & Stats ---")
+    sorted_players = sorted(player_stats.items(), key=lambda item: (item[1]['wins']/item[1]['games_for_win_rate'] if item[1]['games_for_win_rate'] > 0 else 0, item[1]['wins'], item[1]['games_played']), reverse=True)
+
+    for player_name, stats in sorted_players:
+        games_played = stats['games_played']
+        wins = stats['wins']
+        games_for_win_rate = stats.get('games_for_win_rate', 0)
+        win_rate = (stats['wins'] / games_for_win_rate * 100) if games_for_win_rate > 0 else 0
+        playtime_str = str(timedelta(seconds=int(stats['total_playtime_seconds'])))
+
+        print(f"\n- {player_name}:")
+        print(f"  - Games Played: {stats['games_played']}") # Total games played
+        print(f"  - Wins: {stats['wins']} (Win Rate: {win_rate:.1f}% based on {games_for_win_rate} games with a determined winner)")
+        print(f"  - Total Playtime: {playtime_str}")
+
+    # --- Player Civilization Performance ---
+    print("\n--- Player Civilization Performance ---")
+    for player_name, stats in sorted_players:
+        print(f"\n- {player_name}:")
+        if not stats['civs_played']:
+            print("  - No civilization data available.")
+            continue
+
+        # Find the highest play count for this player's civs
+        max_played = max(stats['civs_played'].values())
+        # Find all civs with that play count (to handle ties)
+        most_played_civs = [civ for civ, count in stats['civs_played'].items() if count == max_played]
+
+        print("  - Most Played Civ(s):")
+        for civ in most_played_civs:
+            wins = stats['civ_wins'].get(civ, 0)
+            civ_games_for_win_rate = stats['civ_games_for_win_rate'].get(civ, 0)
+            civ_win_rate = (wins / civ_games_for_win_rate * 100) if civ_games_for_win_rate > 0 else 0
+            # 'count' is the total number of times the civ was played
+            print(f"    - {civ}: {stats['civs_played'][civ]} game(s), {civ_win_rate:.1f}% win rate (based on {civ_games_for_win_rate} games with a determined winner)")
+
+    # --- Overall Civilization Popularity ---
+    print("\n--- Top 10 Most Popular Civilizations ---")
+    sorted_civs = sorted(game_stats['overall_civ_picks'].items(), key=lambda item: item[1], reverse=True)
+    print("Most Picked Civilizations Overall:")
+    for i, (civ, count) in enumerate(sorted_civs):
+        if i >= 10:
+            break
+        print(f"  - {civ}: {count} times")
+
+# --- Execution ---
+if __name__ == "__main__":
+    analyze_all_games()
+    print_report(player_stats, game_stats)

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Poetry virtualenv
+.venv/
+
+# OS-specific
+.DS_Store
+
+# Project specific
+recorded_games/*
+!recorded_games/.gitkeep
+parsed_games/*
+!parsed_games/.gitkeep
+*.log
+debug_summary_output.json
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.swp
+*~
