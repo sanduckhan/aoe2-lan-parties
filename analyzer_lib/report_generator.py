@@ -320,7 +320,6 @@ def _print_player_civilization_performance(player_stats):
             # 'count' is the total number of times the civ was played
             print(f"    - {civ}: {stats['civs_played'][civ]} game(s), {civ_win_rate:.1f}% win rate (based on {civ_games_for_win_rate} games with a determined winner)")
 
-
 def _print_overall_civilization_popularity(game_stats):
     """Prints the top 10 most popular civilizations overall."""
     print("\n--- Top 10 Most Popular Civilizations ---")
@@ -357,6 +356,7 @@ def print_report(player_stats, game_stats):
     _print_bitter_salt_baron(player_stats, game_stats) # Moved here
 
     _print_player_leaderboard(player_stats)
+
 
     _print_player_civilization_performance(player_stats)
 

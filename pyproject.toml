@@ -2,12 +2,14 @@
 name = "aoe2-lan-party-analyzer"
 version = "0.1.0"
 description = "Analyzes Age of Empires II recorded game files from LAN parties to generate statistics and awards."
-authors = ["Your Name <you@example.com>"] # TODO: Replace with your actual name and email
+authors = ["EMMANUEL marboeuf <marboeuf.e@gmail.com>"]
 readme = "README.md"
+packages = [{include = "analyzer_lib"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.13"  # Compatible with Python 3.9 up to 3.12
-aoc-mgz = "^1.5.2"      # Using a recent version of aoc-mgz
+mgz = "^1.8.31"      # Using a recent version of mgz
+trueskill = "^0.4.5" 
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0" # Optional: for testing

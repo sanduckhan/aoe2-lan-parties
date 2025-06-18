@@ -7,7 +7,18 @@ RECORDED_GAMES_DIR = 'recorded_games'
 # Example: PLAYER_ALIASES = {"OldName1": "CanonicalName", "AnotherName": "CanonicalName"}
 PLAYER_ALIASES = {
     "Claquettes Chaussettes": "Boivinos",
-    "Boivinos": "Boivinos"
+    "Boivinos": "Boivinos",
+    "LiKiD": "LiKiD",
+    "Fatmonkey": "Fatmonkey",
+    "youri basmati": "youri basmati",
+    "Bigfouine007": "Bigfouine007",
+    "Sanduck": "Sanduck",
+    "Djokolonel": "Djokolonel",
+    "Bedev": "Bedev",
+    "Coton Ouaté": "Coton Ouaté",
+    "vodkite49": "vodkite49",
+    "Jolly Roger": "Jolly Roger",
+    "Tfirda": "Tfirda"
 }
 
 # List of crucial upgrades. Used for the 'Most Likely to Forget Crucial Upgrade' award.
@@ -24,6 +35,14 @@ CRUCIAL_UPGRADES = sorted([
 
 # Set of unit names that are considered non-military. 
 # Used to filter units for certain stats, e.g., when determining favorite military unit.
+# TrueSkill Parameters
+TRUESKILL_MU = 25.0              # Initial mean skill
+TRUESKILL_SIGMA = TRUESKILL_MU / 3 # Initial skill uncertainty (standard deviation)
+TRUESKILL_BETA = TRUESKILL_SIGMA / 2 # Skill variance, lower is more reactive to upsets
+TRUESKILL_TAU = TRUESKILL_SIGMA / 100 # Dynamic factor, how much ratings change over time (per game)
+TRUESKILL_DRAW_PROBABILITY = 0.10 # Probability of a draw
+TRUESKILL_ELO_SCALING_FACTOR = 40 # Factor to scale TrueSkill mu/sigma to ELO-like numbers (e.g., 25*40=1000)
+
 NON_MILITARY_UNITS = {
     "Villager",
     "Fishing Ship",

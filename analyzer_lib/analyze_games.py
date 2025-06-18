@@ -1,9 +1,10 @@
 import os
 from collections import defaultdict
-from datetime import timedelta
+from datetime import timedelta, datetime
 from . import config # Added import
 # NON_MILITARY_UNITS = {"Villager", "Fishing Ship"} # Removed
 from mgz.model import parse_match
+import re
 
 # --- Configuration ---
 # RECORDED_GAMES_DIR = 'recorded_games' # Removed
@@ -43,6 +44,19 @@ game_stats = {
         'market_mogul': {'player': None, 'transactions': 0}
     }
 }
+
+
+def _get_datetime_from_filename(filename):
+    """Extracts datetime from filename to allow chronological sorting."""
+    match = re.search(r'@(\d{4}\.\d{2}\.\d{2} \d{6})', filename)
+    if match:
+        datetime_str = match.group(1)
+        try:
+            return datetime.strptime(datetime_str, '%Y.%m.%d %H%M%S')
+        except ValueError:
+            return datetime.min # Should not happen with this regex
+    return datetime.min # Files without a timestamp processed first
+
 
 # --- Main Logic ---
 def parse_replay_file(file_path, filename):
@@ -349,10 +363,13 @@ def analyze_all_games():
     print(f"--- Starting Analysis of Games in '{config.RECORDED_GAMES_DIR}' ---")
     player_game_chronology = defaultdict(list) # To store game results chronologically per player
 
-    for filename in os.listdir(config.RECORDED_GAMES_DIR):
-        if not filename.endswith(('.aoe2record', '.mgz', '.mgx')):
-            continue
+    replay_files = [f for f in os.listdir(config.RECORDED_GAMES_DIR) if f.endswith('.aoe2record')]
+    replay_files.sort(key=_get_datetime_from_filename) # Sort files chronologically
 
+    total_files = len(replay_files)
+    print(f"Found {total_files} replay files to analyze.")
+
+    for filename in replay_files:
         file_path = os.path.join(config.RECORDED_GAMES_DIR, filename)
         match = parse_replay_file(file_path, filename)
 
@@ -363,6 +380,11 @@ def analyze_all_games():
         try:
             duration_seconds = match.duration.total_seconds()
             human_players_from_match = [p for p in match.players if hasattr(p, 'profile_id') and p.profile_id is not None]
+
+            # --- Apply Player Aliases ---
+            for player in human_players_from_match:
+                player.name = config.PLAYER_ALIASES.get(player.name, player.name)
+
             human_player_names_in_match = {p.name for p in human_players_from_match}
 
             # --- Aggregate General Game Stats ---
@@ -388,3 +410,5 @@ def analyze_all_games():
 
     # --- Calculate Losing Streaks ---
     _calculate_losing_streaks(player_game_chronology, player_stats)
+
+    return player_stats, game_stats
