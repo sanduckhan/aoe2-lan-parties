@@ -235,7 +235,7 @@ def _print_forgetful_upgrades_award(player_stats):
         # Details show percentage of games where upgrade WAS researched for clarity
         winner_details_str = ", ".join([f"{tech}: {winner['details'][tech]:.0f}%" for tech in config.CRUCIAL_UPGRADES])
         print(f"Winner: {winner['name']} (Average Forgetfulness: {winner['avg_forget']:.1f}%)")
-        print(f"  - Details: {winner_details_str} of games.")
+        print(f"  - Details (% Researched): {winner_details_str} of games.")
 
         # Runner-up
         if len(forgetful_players_data) > 1:
@@ -244,7 +244,7 @@ def _print_forgetful_upgrades_award(player_stats):
             if runner_up['avg_forget'] < winner['avg_forget'] and runner_up['avg_forget'] > 0:
                 runner_up_details_str = ", ".join([f"{tech}: {runner_up['details'][tech]:.0f}%" for tech in config.CRUCIAL_UPGRADES])
                 print(f"  - Second place: {runner_up['name']} (Average Forgetfulness: {runner_up['avg_forget']:.1f}%)")
-                print(f"    - Details: {runner_up_details_str} of games.")
+                print(f"    - Details (% Researched): {runner_up_details_str} of games.")
 
 
 def _print_player_leaderboard(player_stats):
