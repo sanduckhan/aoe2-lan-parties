@@ -15,6 +15,8 @@ player_stats = defaultdict(lambda: {
     'games_for_win_rate': 0, # Games where a winner was determined
     'wins': 0,
     'total_playtime_seconds': 0,
+    'total_eapm': 0,
+    'games_with_eapm': 0,
     'civs_played': defaultdict(int),
     'civ_wins': defaultdict(int),
     'civ_losses': defaultdict(int),
@@ -166,6 +168,11 @@ def _update_player_core_stats(player, match_obj, is_winner, winning_team_id, dur
     if is_winner:
         player_stats[player_name]['wins'] += 1
     player_stats[player_name]['total_playtime_seconds'] += duration_seconds
+
+    # Track eAPM
+    if player.eapm:
+        player_stats[player_name]['total_eapm'] += player.eapm
+        player_stats[player_name]['games_with_eapm'] += 1
 
     civ_name = player.civilization
     player_stats[player_name]['civs_played'][civ_name] += 1

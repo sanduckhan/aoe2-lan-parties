@@ -5,7 +5,10 @@ RECORDED_GAMES_DIR = 'recorded_games'
 
 # Player aliases to consolidate stats for players who might use different names.
 # Example: PLAYER_ALIASES = {"OldName1": "CanonicalName", "AnotherName": "CanonicalName"}
-PLAYER_ALIASES = {}
+PLAYER_ALIASES = {
+    "Claquettes Chaussettes": "Boivinos",
+    "Boivinos": "Boivinos"
+}
 
 # List of crucial upgrades. Used for the 'Most Likely to Forget Crucial Upgrade' award.
 # These are examples, adjust as per your game version and what you consider crucial.

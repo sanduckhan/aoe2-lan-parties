@@ -247,6 +247,29 @@ def _print_forgetful_upgrades_award(player_stats):
                 print(f"    - Details (% Researched): {runner_up_details_str} of games.")
 
 
+def _print_apm_award(player_stats):
+    """Prints "The Jittery Caffeinated Fingers" award for the highest average eAPM."""
+    apm_data = []
+    for player_name, stats in player_stats.items():
+        if stats.get('games_with_eapm', 0) > 0:
+            average_eapm = stats['total_eapm'] / stats['games_with_eapm']
+            apm_data.append({'name': player_name, 'avg_eapm': average_eapm})
+
+    if not apm_data:
+        return
+
+    # Sort by average eAPM descending
+    apm_data.sort(key=lambda x: x['avg_eapm'], reverse=True)
+
+    print("\n--- \"The Jittery Caffeinated Fingers\" Award (Highest eAPM) ---")
+    winner = apm_data[0]
+    print(f"Winner: {winner['name']} with an average of {winner['avg_eapm']:.0f} eAPM!")
+
+    if len(apm_data) > 1:
+        runner_up = apm_data[1]
+        print(f"  - Second place: {runner_up['name']} with {runner_up['avg_eapm']:.0f} eAPM.")
+
+
 def _print_player_leaderboard(player_stats):
     """Prints the player leaderboard with core statistics."""
     print("\n--- Player Leaderboard & Stats ---")
@@ -328,6 +351,8 @@ def print_report(player_stats, game_stats):
     _print_market_mogul_award(player_stats)
 
     _print_forgetful_upgrades_award(player_stats)
+
+    _print_apm_award(player_stats)
 
     _print_bitter_salt_baron(player_stats, game_stats) # Moved here
 
