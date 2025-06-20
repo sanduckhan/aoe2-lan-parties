@@ -16,6 +16,9 @@ parsed_games/*
 !parsed_games/.gitkeep
 *.log
 debug_summary_output.json
+plots/*
+!plots/.gitkeep
+player_ratings.json
 
 # IDE / Editor specific
 .vscode/
