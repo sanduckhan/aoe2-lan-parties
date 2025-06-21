@@ -51,30 +51,39 @@ def find_balanced_teams(player_ts_ratings: Dict[str, trueskill.Rating], ts_env: 
     Finds the most balanced team combinations for a given list of players.
     Returns a list of tuples: (quality_score, team1_names, team2_names)
     """
-    player_names = list(player_ts_ratings.keys())
-    n_players = len(player_names)
+    players_in_game = list(player_ts_ratings.keys())
+    num_players = len(players_in_game)
     
-    if n_players < 2:
-        # This case should ideally be caught before calling this function
+    if num_players < 2:
         print("Need at least 2 players to form two teams.")
         return []
 
     possible_matchups = []
+    processed_matchups = set()
 
-    for team1_size in range(1, n_players // 2 + 1):
-        for team1_tuple in itertools.combinations(player_names, team1_size):
-            team1_list = list(team1_tuple)
-            team2_list = [p for p in player_names if p not in team1_list]
+    # Iterate through all possible team sizes for team 1
+    for team1_size in range(1, num_players // 2 + 1):
+        # Iterate through all combinations for team 1 of that size
+        for team1_tuple in itertools.combinations(players_in_game, team1_size):
+            team1_names = list(team1_tuple)
+            team2_names = [p for p in players_in_game if p not in team1_names]
 
-            if not team1_list or not team2_list:
+            # Create a canonical representation to avoid duplicates
+            canonical_matchup = tuple(sorted((tuple(sorted(team1_names)), tuple(sorted(team2_names)))))
+            if canonical_matchup in processed_matchups:
+                continue
+            processed_matchups.add(canonical_matchup)
+
+            team1_ratings = tuple(player_ts_ratings[name] for name in team1_names)
+            team2_ratings = tuple(player_ts_ratings[name] for name in team2_names)
+
+            if not team1_ratings or not team2_ratings:
                 continue
 
-            team1_ratings = tuple(player_ts_ratings[name] for name in team1_list)
-            team2_ratings = tuple(player_ts_ratings[name] for name in team2_list)
-            
-            match_quality = ts_env.quality([team1_ratings, team2_ratings])
-            possible_matchups.append((match_quality, sorted(team1_list), sorted(team2_list)))
+            quality = ts_env.quality([team1_ratings, team2_ratings])
+            possible_matchups.append((quality, sorted(team1_names), sorted(team2_names)))
 
+    # Sort all found matchups by quality, descending
     possible_matchups.sort(key=lambda x: x[0], reverse=True)
     
     return possible_matchups[:top_n]
@@ -141,47 +150,62 @@ def main():
         print("Match Quality is the calculated probability of a draw. A higher percentage indicates a more balanced and unpredictable game.")
 
         for i, (quality, team1_names_sorted, team2_names_sorted) in enumerate(balanced_teams):
-            print(f"\nSuggestion #{i+1} (Match Quality: {quality*100:.2f}%)")
-            print(f"  Team 1: {', '.join(team1_names_sorted)} (Size: {len(team1_names_sorted)})")
-            print(f"  Team 2: {', '.join(team2_names_sorted)} (Size: {len(team2_names_sorted)})")
+            print(f"\n--- Suggestion #{i+1} ---")
+            print(f"Match Quality: {quality*100:.2f}%")
+            print(f"  Team 1: {', '.join(team1_names_sorted)}")
+            print(f"  Team 2: {', '.join(team2_names_sorted)}")
 
-            # Prepare rating objects for simulation
-            team1_current_ratings_tuple = tuple(final_player_ts_ratings[name] for name in team1_names_sorted)
-            team2_current_ratings_tuple = tuple(final_player_ts_ratings[name] for name in team2_names_sorted)
+            # Determine Expected Winner by comparing sum of ratings
+            team1_mu_sum = sum(final_player_ts_ratings[name].mu for name in team1_names_sorted)
+            team2_mu_sum = sum(final_player_ts_ratings[name].mu for name in team2_names_sorted)
+            
+            if abs(team1_mu_sum - team2_mu_sum) < 0.01: # Arbitrary small threshold
+                expected_winner = "Too close to call"
+            elif team1_mu_sum > team2_mu_sum:
+                expected_winner = "Team 1"
+            else:
+                expected_winner = "Team 2"
+            print(f"  Expected Winner: {expected_winner}")
 
-            # Simulate Team 1 wins
-            if team1_current_ratings_tuple and team2_current_ratings_tuple: # Ensure teams are not empty
-                new_ratings_t1_wins = ts_env.rate([team1_current_ratings_tuple, team2_current_ratings_tuple], ranks=[0, 1])
-                print("\n  Potential Outcomes & Rating Changes (Scaled Mu ± Scaled Sigma):")
-                print("  -----------------------------------------------------------------------")
-                print("  IF Team 1 WINS:")
+            # --- Simulate outcomes and store deltas ---
+            team1_ratings = tuple(final_player_ts_ratings[name] for name in team1_names_sorted)
+            team2_ratings = tuple(final_player_ts_ratings[name] for name in team2_names_sorted)
+            
+            potential_changes = {}
+
+            if team1_ratings and team2_ratings:
+                # Simulate Team 1 winning (Team 2 loses)
+                t1_wins_ratings = ts_env.rate([team1_ratings, team2_ratings], ranks=[0, 1])
+                # Simulate Team 2 winning (Team 1 loses)
+                t2_wins_ratings = ts_env.rate([team1_ratings, team2_ratings], ranks=[1, 0])
+
+                # Populate changes for Team 1 players
                 for idx, player_name in enumerate(team1_names_sorted):
-                    old_r = team1_current_ratings_tuple[idx]
-                    new_r = new_ratings_t1_wins[0][idx]
-                    delta_mu_scaled = (new_r.mu - old_r.mu) * ELO_SCALING_FACTOR
-                    print(f"    {player_name:<18}: μ {old_r.mu * ELO_SCALING_FACTOR:7.2f} → {new_r.mu * ELO_SCALING_FACTOR:7.2f} ({delta_mu_scaled:+6.2f}) | σ {old_r.sigma * ELO_SCALING_FACTOR:5.2f} → {new_r.sigma * ELO_SCALING_FACTOR:5.2f}")
+                    old_mu = team1_ratings[idx].mu
+                    potential_changes[player_name] = {
+                        'win': (t1_wins_ratings[0][idx].mu - old_mu) * ELO_SCALING_FACTOR,
+                        'loss': (t2_wins_ratings[0][idx].mu - old_mu) * ELO_SCALING_FACTOR
+                    }
+                
+                # Populate changes for Team 2 players
                 for idx, player_name in enumerate(team2_names_sorted):
-                    old_r = team2_current_ratings_tuple[idx]
-                    new_r = new_ratings_t1_wins[1][idx]
-                    delta_mu_scaled = (new_r.mu - old_r.mu) * ELO_SCALING_FACTOR
-                    print(f"    {player_name:<18}: μ {old_r.mu * ELO_SCALING_FACTOR:7.2f} → {new_r.mu * ELO_SCALING_FACTOR:7.2f} ({delta_mu_scaled:+6.2f}) | σ {old_r.sigma * ELO_SCALING_FACTOR:5.2f} → {new_r.sigma * ELO_SCALING_FACTOR:5.2f}")
+                    old_mu = team2_ratings[idx].mu
+                    potential_changes[player_name] = {
+                        'win': (t2_wins_ratings[1][idx].mu - old_mu) * ELO_SCALING_FACTOR,
+                        'loss': (t1_wins_ratings[1][idx].mu - old_mu) * ELO_SCALING_FACTOR
+                    }
 
-            # Simulate Team 2 wins
-            if team1_current_ratings_tuple and team2_current_ratings_tuple: # Ensure teams are not empty
-                new_ratings_t2_wins = ts_env.rate([team1_current_ratings_tuple, team2_current_ratings_tuple], ranks=[1, 0])
-                print("  -----------------------------------------------------------------------")
-                print("  IF Team 2 WINS:")
-                for idx, player_name in enumerate(team1_names_sorted):
-                    old_r = team1_current_ratings_tuple[idx]
-                    new_r = new_ratings_t2_wins[0][idx]
-                    delta_mu_scaled = (new_r.mu - old_r.mu) * ELO_SCALING_FACTOR
-                    print(f"    {player_name:<18}: μ {old_r.mu * ELO_SCALING_FACTOR:7.2f} → {new_r.mu * ELO_SCALING_FACTOR:7.2f} ({delta_mu_scaled:+6.2f}) | σ {old_r.sigma * ELO_SCALING_FACTOR:5.2f} → {new_r.sigma * ELO_SCALING_FACTOR:5.2f}")
-                for idx, player_name in enumerate(team2_names_sorted):
-                    old_r = team2_current_ratings_tuple[idx]
-                    new_r = new_ratings_t2_wins[1][idx]
-                    delta_mu_scaled = (new_r.mu - old_r.mu) * ELO_SCALING_FACTOR
-                    print(f"    {player_name:<18}: μ {old_r.mu * ELO_SCALING_FACTOR:7.2f} → {new_r.mu * ELO_SCALING_FACTOR:7.2f} ({delta_mu_scaled:+6.2f}) | σ {old_r.sigma * ELO_SCALING_FACTOR:5.2f} → {new_r.sigma * ELO_SCALING_FACTOR:5.2f}")
-                print("  -----------------------------------------------------------------------")
+            # --- Print the simplified summary ---
+            if potential_changes:
+                print("\n  Potential Rating Changes (Win / Loss):")
+                print("    Team 1:")
+                for player_name in team1_names_sorted:
+                    changes = potential_changes[player_name]
+                    print(f"      {player_name:<16}: {changes['win']:+6.2f} / {changes['loss']:+6.2f}")
+                print("    Team 2:")
+                for player_name in team2_names_sorted:
+                    changes = potential_changes[player_name]
+                    print(f"      {player_name:<16}: {changes['win']:+6.2f} / {changes['loss']:+6.2f}")
 
 if __name__ == "__main__":
     main()
