@@ -137,6 +137,10 @@ class GameData:
             logging.warning(f"Skipping file {filename}: Error parsing - {e}")
             return None
 
+    def get_player_handicaps(self) -> Dict[str, int]:
+        """Returns a dict mapping player name -> handicap value (100 = normal)."""
+        return {p.name: getattr(p, 'handicap', 100) for p in self.human_players}
+
     def is_valid_for_rating(self) -> bool:
         if self.winning_team_id is None:
             logging.debug(f"Game {self.filename} invalid for rating: No clear winner.")
@@ -170,6 +174,8 @@ class TrueSkillCalculator:
         team1_player_objs = game_data.teams_data[team1_id]
         team2_player_objs = game_data.teams_data[team2_id]
 
+        player_handicaps = game_data.get_player_handicaps()
+
         team1_ratings_dict = {p.name: self.get_or_create_player_rating(p.name).rating for p in team1_player_objs}
         team2_ratings_dict = {p.name: self.get_or_create_player_rating(p.name).rating for p in team2_player_objs}
 
@@ -178,28 +184,20 @@ class TrueSkillCalculator:
         else:
             ranks = [1, 0]
 
-        weights = None
         num_players_team1 = len(team1_player_objs)
         num_players_team2 = len(team2_player_objs)
 
-        if num_players_team1 != num_players_team2 and num_players_team1 > 0 and num_players_team2 > 0:
-            logging.info(f"Game {game_data.filename} has unbalanced teams: {num_players_team1} vs {num_players_team2}. Applying fixed weight of 0.3 to all players.")
-            team1_weights = [0.3] * num_players_team1
-            team2_weights = [0.3] * num_players_team2
-            weights = [team1_weights, team2_weights]
-        
+        if num_players_team1 != num_players_team2:
+            logging.info(
+                f"Game {game_data.filename} has unbalanced teams: "
+                f"{num_players_team1} vs {num_players_team2}."
+            )
+
         try:
-            if weights:
-                new_ratings_by_team = self.ts_env.rate(
-                    [team1_ratings_dict, team2_ratings_dict], 
-                    ranks=ranks,
-                    weights=weights
-                )
-            else:
-                new_ratings_by_team = self.ts_env.rate(
-                    [team1_ratings_dict, team2_ratings_dict], 
-                    ranks=ranks
-                )
+            new_ratings_by_team = self.ts_env.rate(
+                [team1_ratings_dict, team2_ratings_dict],
+                ranks=ranks
+            )
             
             updated_team1_ratings_map, updated_team2_ratings_map = new_ratings_by_team[0], new_ratings_by_team[1]
 
@@ -207,50 +205,58 @@ class TrueSkillCalculator:
                 player_rating_obj = self.get_or_create_player_rating(player_name)
                 old_mu_scaled = player_rating_obj.get_scaled_mu()
                 old_sigma_scaled = player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
-                
+
                 player_rating_obj.update_rating(updated_team1_ratings_map[player_name])
-                
+
                 new_mu_scaled = player_rating_obj.get_scaled_mu()
                 new_sigma_scaled = player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
                 delta_mu = new_mu_scaled - old_mu_scaled
                 delta_sigma = new_sigma_scaled - old_sigma_scaled
+                handicap = player_handicaps.get(player_name, 100)
+                handicap_str = f" [Handicap: {handicap}%]" if handicap > 100 else ""
                 logging.info(
-                    f"Update | Game: {game_data.filename} | Player: {player_name:<15} | "
+                    f"Update | Game: {game_data.filename} | Player: {player_name:<15}{handicap_str} | "
                     f"μ: {old_mu_scaled:7.2f} → {new_mu_scaled:7.2f} ({delta_mu:+.2f}) | "
                     f"σ: {old_sigma_scaled:6.2f} → {new_sigma_scaled:6.2f} ({delta_sigma:+.2f})"
                 )
                 self.rating_history.append({
-                    'game_index': game_index, 
-                    'player_name': player_name, 
-                    'mu': player_rating_obj.get_scaled_mu(), 
-                    'sigma': player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
+                    'game_index': game_index,
+                    'player_name': player_name,
+                    'mu': player_rating_obj.get_scaled_mu(),
+                    'sigma': player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR,
+                    'handicap': handicap,
                 })
 
             for player_name in team2_ratings_dict.keys():
                 player_rating_obj = self.get_or_create_player_rating(player_name)
                 old_mu_scaled = player_rating_obj.get_scaled_mu()
                 old_sigma_scaled = player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
-                
+
                 player_rating_obj.update_rating(updated_team2_ratings_map[player_name])
-                
+
                 new_mu_scaled = player_rating_obj.get_scaled_mu()
                 new_sigma_scaled = player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
                 delta_mu = new_mu_scaled - old_mu_scaled
                 delta_sigma = new_sigma_scaled - old_sigma_scaled
+                handicap = player_handicaps.get(player_name, 100)
+                handicap_str = f" [Handicap: {handicap}%]" if handicap > 100 else ""
                 logging.info(
-                    f"Update | Game: {game_data.filename} | Player: {player_name:<15} | "
+                    f"Update | Game: {game_data.filename} | Player: {player_name:<15}{handicap_str} | "
                     f"μ: {old_mu_scaled:7.2f} → {new_mu_scaled:7.2f} ({delta_mu:+.2f}) | "
                     f"σ: {old_sigma_scaled:6.2f} → {new_sigma_scaled:6.2f} ({delta_sigma:+.2f})"
                 )
                 self.rating_history.append({
-                    'game_index': game_index, 
-                    'player_name': player_name, 
-                    'mu': player_rating_obj.get_scaled_mu(), 
-                    'sigma': player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
+                    'game_index': game_index,
+                    'player_name': player_name,
+                    'mu': player_rating_obj.get_scaled_mu(),
+                    'sigma': player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR,
+                    'handicap': handicap,
                 })
 
         except Exception as e:
             logging.error(f"Error updating TrueSkill ratings for game {game_data.filename}: {type(e).__name__} - {repr(e)}")
+
+
 
 class ReportGenerator:
     """Generates textual and graphical reports for TrueSkill ratings."""
@@ -358,20 +364,28 @@ class ReportGenerator:
         finally:
             plt.close()
 
-    def save_ratings_to_json(self, player_ratings_map: Dict[str, PlayerRating], output_filename: str = "player_ratings.json"):
+    def save_ratings_to_json(self, player_ratings_map: Dict[str, PlayerRating], rating_history: List[Dict[str, Any]],
+                             output_filename: str = "player_ratings.json"):
         """Saves the player ratings to a JSON file."""
         ratings_list = []
         for player_name, player_rating_obj in player_ratings_map.items():
-            ratings_list.append({
+            player_history = [h for h in rating_history if h['player_name'] == player_name]
+            last_30 = player_history[-30:]
+            last_30_handicaps = [h.get('handicap', 100) for h in last_30]
+            avg_handicap_last_30 = round(sum(last_30_handicaps) / len(last_30_handicaps), 1) if last_30_handicaps else 100.0
+            entry = {
                 "name": player_name,
                 "mu_scaled": round(player_rating_obj.get_scaled_mu(), 2),
                 "sigma_scaled": round(player_rating_obj.rating.sigma * self.elo_scaling_factor, 2),
                 "mu_unscaled": round(player_rating_obj.rating.mu, 4),
                 "sigma_unscaled": round(player_rating_obj.rating.sigma, 4),
                 "games_played": player_rating_obj.games_played,
-                "confidence_percent": round(player_rating_obj.get_confidence_percent(self.initial_unscaled_sigma), 1)
-            })
-        
+                "confidence_percent": round(player_rating_obj.get_confidence_percent(self.initial_unscaled_sigma), 1),
+                "avg_handicap_last_30": avg_handicap_last_30,
+            }
+
+            ratings_list.append(entry)
+
         # Sort by scaled mu descending for consistent order in JSON
         ratings_list.sort(key=lambda x: x['mu_scaled'], reverse=True)
 
@@ -400,13 +414,14 @@ def main():
     # GameData._get_datetime_from_filename is used here before GameData objects are created
     replay_files_paths.sort(key=lambda f: GameData._get_datetime_from_filename(os.path.basename(f)))
 
-    calculator = TrueSkillCalculator(
+    ts_params = dict(
         mu=config.TRUESKILL_MU,
         sigma=config.TRUESKILL_SIGMA,
         beta=config.TRUESKILL_BETA,
         tau=config.TRUESKILL_TAU,
         draw_probability=config.TRUESKILL_DRAW_PROBABILITY
     )
+    calculator = TrueSkillCalculator(**ts_params)
     reporter = ReportGenerator(
         elo_scaling_factor=config.TRUESKILL_ELO_SCALING_FACTOR,
         initial_unscaled_sigma=config.TRUESKILL_SIGMA,
@@ -434,13 +449,13 @@ def main():
         if not game_data.is_valid_for_rating():
             invalid_games_skipped += 1
             continue
-        
+
         game_index_rated += 1
         calculator.update_ratings_for_game(game_data, game_index_rated)
-    
+
     reporter.print_final_rankings(calculator.player_ratings, config.MIN_GAMES_FOR_RANKING)
     reporter.plot_rating_evolution(calculator.rating_history)
-    reporter.save_ratings_to_json(calculator.player_ratings)
+    reporter.save_ratings_to_json(calculator.player_ratings, calculator.rating_history)
 
     logging.info("\n--- Skipped Games Summary ---")
     logging.info(f"  Games skipped due to parsing errors, duration, or invalid teams: {invalid_games_skipped}")

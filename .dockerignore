@@ -1,0 +1,16 @@
+recorded_games/
+*.aoe2record
+venv/
+__pycache__/
+*.pyc
+.git/
+*.png
+*.jpg
+poetry.lock
+pyproject.toml
+build_windows_zip.sh
+start.bat
+requirements-web.txt
+aoe2-lan-party-web.zip
+CLAUDE.md
+README.md

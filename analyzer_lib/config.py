@@ -46,6 +46,7 @@ TRUESKILL_ELO_SCALING_FACTOR = 40 # Factor to scale TrueSkill mu/sigma to ELO-li
 MIN_GAMES_FOR_RANKING = 60       # Minimum games a player must have played to be in the main ranking table
 PLOT_MIN_GAMES_THRESHOLD = 5     # Minimum games a player must have played to be included in the rating evolution plot
 
+
 # Original line to be replaced was just the TRUESKILL_MU line, but we need to insert the new params here.
 # So, effectively, we are replacing the start of the TrueSkill params section to include the new ones.
 # The actual TRUESKILL_MU line is re-added below to ensure it's not lost.

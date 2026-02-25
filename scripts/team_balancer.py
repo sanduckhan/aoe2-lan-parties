@@ -29,8 +29,10 @@ except ImportError as e:
     ELO_SCALING_FACTOR = 40
 
 import trueskill # Placed after sys.path modification
+from handicap_recommender import recommended_handicap
 
 PLAYER_RATINGS_FILE = os.path.join(PROJECT_ROOT, "player_ratings.json")
+MAX_TEAM_SIZE = 4  # AoE2 DE supports up to 4v4
 
 def load_player_ratings(filepath: str = PLAYER_RATINGS_FILE) -> Dict[str, Dict[str, Any]]:
     """Loads player ratings from the JSON file."""
@@ -46,6 +48,132 @@ def load_player_ratings(filepath: str = PLAYER_RATINGS_FILE) -> Dict[str, Dict[s
         print(f"Error: Could not decode JSON from {filepath}")
         sys.exit(1)
 
+def suggest_rebalances_data(team1_names: List[str], team2_names: List[str], weaker_team: int,
+                            player_ts_ratings: Dict[str, trueskill.Rating],
+                            all_ratings_data: Dict[str, Dict[str, Any]],
+                            ts_env: trueskill.TrueSkill, top_n: int = 5) -> Dict[str, Any]:
+    """Return structured rebalance data instead of printing."""
+    if weaker_team == 1:
+        weak_names, strong_names = list(team1_names), list(team2_names)
+    else:
+        weak_names, strong_names = list(team2_names), list(team1_names)
+
+    def team_mu_scaled(names):
+        return sum(all_ratings_data[n]['mu_scaled'] for n in names)
+
+    def team_quality(t1, t2):
+        r1 = tuple(player_ts_ratings[n] for n in t1)
+        r2 = tuple(player_ts_ratings[n] for n in t2)
+        if not r1 or not r2:
+            return 0.0
+        return ts_env.quality([r1, r2])
+
+    def player_info(name):
+        data = all_ratings_data[name]
+        avg_hc = data.get('avg_handicap_last_30', 100)
+        return {
+            "name": name,
+            "rating": data['mu_scaled'],
+            "recommended_hc": recommended_handicap(data['mu_scaled'], avg_hc),
+            "games_played": data['games_played'],
+        }
+
+    current_weak_mu = team_mu_scaled(weak_names)
+    current_quality = team_quality(team1_names, team2_names)
+    t1_avg = team_mu_scaled(team1_names) / len(team1_names)
+    t2_avg = team_mu_scaled(team2_names) / len(team2_names)
+
+    result = {
+        "current_setup": {
+            "team1": [player_info(n) for n in sorted(team1_names)],
+            "team2": [player_info(n) for n in sorted(team2_names)],
+            "team1_avg_rating": round(t1_avg, 0),
+            "team2_avg_rating": round(t2_avg, 0),
+            "weaker_team": weaker_team,
+            "match_quality": round(current_quality * 100, 2),
+        },
+        "suggestions": [],
+    }
+
+    candidates = []  # (mu_gain_for_weak, description, new_t1, new_t2)
+
+    # Swaps: one from strong team <-> one from weak team
+    for s in strong_names:
+        for w in weak_names:
+            new_weak = [p for p in weak_names if p != w] + [s]
+            new_strong = [p for p in strong_names if p != s] + [w]
+            if weaker_team == 1:
+                new_t1, new_t2 = new_weak, new_strong
+            else:
+                new_t1, new_t2 = new_strong, new_weak
+            new_weak_mu = team_mu_scaled(new_weak)
+            gain = new_weak_mu - current_weak_mu
+            if gain > 0:
+                candidates.append((gain, f"Swap {w} \u2194 {s}", new_t1, new_t2))
+
+    # Moves: one player from strong team to weak team (only if weak team has room)
+    for s in strong_names:
+        new_weak = weak_names + [s]
+        new_strong = [p for p in strong_names if p != s]
+        if not new_strong:
+            continue
+        if len(new_weak) > MAX_TEAM_SIZE:
+            continue
+        if weaker_team == 1:
+            new_t1, new_t2 = new_weak, new_strong
+        else:
+            new_t1, new_t2 = new_strong, new_weak
+        new_weak_mu = team_mu_scaled(new_weak)
+        gain = new_weak_mu - current_weak_mu
+        if gain > 0:
+            candidates.append((gain, f"Move {s} to Team {weaker_team}", new_t1, new_t2))
+
+    # Sort by smallest gain first (least disruption)
+    candidates.sort(key=lambda x: x[0])
+
+    for gain, desc, new_t1, new_t2 in candidates[:top_n]:
+        quality = team_quality(new_t1, new_t2)
+        result["suggestions"].append({
+            "description": desc,
+            "team1": [player_info(n) for n in sorted(new_t1)],
+            "team2": [player_info(n) for n in sorted(new_t2)],
+            "rating_gain": round(gain, 0),
+            "match_quality": round(quality * 100, 2),
+        })
+
+    return result
+
+
+def suggest_rebalances(team1_names: List[str], team2_names: List[str], weaker_team: int,
+                       player_ts_ratings: Dict[str, trueskill.Rating],
+                       all_ratings_data: Dict[str, Dict[str, Any]],
+                       ts_env: trueskill.TrueSkill, top_n: int = 5):
+    """Suggest minimal changes (swaps/moves) to help the weaker team."""
+    data = suggest_rebalances_data(team1_names, team2_names, weaker_team,
+                                   player_ts_ratings, all_ratings_data, ts_env, top_n)
+
+    setup = data["current_setup"]
+    weak_label = lambda t: " (weaker)" if t == setup["weaker_team"] else ""
+    fmt = lambda p: f"{p['name']} ({p['recommended_hc']}%)"
+
+    print(f"\n--- Current Setup ---")
+    print(f"  Team 1{weak_label(1)}: {', '.join(fmt(p) for p in setup['team1'])}")
+    print(f"  Team 2{weak_label(2)}: {', '.join(fmt(p) for p in setup['team2'])}")
+    print(f"  Team 1 Avg Rating: {setup['team1_avg_rating']:.0f}  |  Team 2 Avg Rating: {setup['team2_avg_rating']:.0f}")
+    print(f"  Match Quality: {setup['match_quality']:.2f}%")
+
+    if not data["suggestions"]:
+        print("\n  No single swap or move can help the weaker team.")
+        return
+
+    print(f"\n--- Suggestions to help Team {setup['weaker_team']} (smallest change first) ---")
+    for i, s in enumerate(data["suggestions"]):
+        print(f"\n  #{i+1}: {s['description']}")
+        print(f"    Team 1: {', '.join(fmt(p) for p in s['team1'])}")
+        print(f"    Team 2: {', '.join(fmt(p) for p in s['team2'])}")
+        print(f"    Team {setup['weaker_team']} gains +{s['rating_gain']:.0f} rating  |  Match Quality: {s['match_quality']:.2f}%")
+
+
 def find_balanced_teams(player_ts_ratings: Dict[str, trueskill.Rating], ts_env: trueskill.TrueSkill, top_n: int = 3) -> List[Tuple[float, List[str], List[str]]]:
     """
     Finds the most balanced team combinations for a given list of players.
@@ -58,15 +186,22 @@ def find_balanced_teams(player_ts_ratings: Dict[str, trueskill.Rating], ts_env: 
         print("Need at least 2 players to form two teams.")
         return []
 
+    if num_players > MAX_TEAM_SIZE * 2:
+        print(f"Error: Too many players ({num_players}). AoE2 supports a maximum of {MAX_TEAM_SIZE}v{MAX_TEAM_SIZE} ({MAX_TEAM_SIZE * 2} players).")
+        return []
+
     possible_matchups = []
     processed_matchups = set()
 
-    # Iterate through all possible team sizes for team 1
-    for team1_size in range(1, num_players // 2 + 1):
+    # Iterate through all possible team sizes for team 1 (capped at MAX_TEAM_SIZE)
+    for team1_size in range(1, min(num_players // 2, MAX_TEAM_SIZE) + 1):
         # Iterate through all combinations for team 1 of that size
         for team1_tuple in itertools.combinations(players_in_game, team1_size):
             team1_names = list(team1_tuple)
             team2_names = [p for p in players_in_game if p not in team1_names]
+
+            if len(team2_names) > MAX_TEAM_SIZE:
+                continue
 
             # Create a canonical representation to avoid duplicates
             canonical_matchup = tuple(sorted((tuple(sorted(team1_names)), tuple(sorted(team2_names)))))
@@ -90,22 +225,54 @@ def find_balanced_teams(player_ts_ratings: Dict[str, trueskill.Rating], ts_env: 
 
 def main():
     parser = argparse.ArgumentParser(description="Suggest balanced teams for AoE2 LAN parties based on TrueSkill ratings.")
-    parser.add_argument("players", nargs='+', help="A list of player names to form teams from.")
-    parser.add_argument("--top_n", type=int, default=3, help="Number of top balanced team suggestions to show.")
-    
+    parser.add_argument("players", nargs='*', help="A list of player names to form teams from (generation mode).")
+    parser.add_argument("--team1", nargs='+', default=None, help="Team 1 player names (rebalance mode).")
+    parser.add_argument("--team2", nargs='+', default=None, help="Team 2 player names (rebalance mode).")
+    parser.add_argument("--weaker", type=int, choices=[1, 2], default=None, help="Which team is weaker (1 or 2).")
+    parser.add_argument("--top_n", type=int, default=3, help="Number of top suggestions to show.")
+
     args = parser.parse_args()
-    
-    requested_player_names = sorted(list(set(args.players))) # Unique player names, sorted
+
+    rebalance_mode = args.team1 is not None and args.team2 is not None
+    if rebalance_mode and args.weaker is None:
+        print("Error: --weaker is required in rebalance mode (--team1 ... --team2 ... --weaker 1|2)")
+        sys.exit(1)
+    if rebalance_mode and (len(args.team1) > MAX_TEAM_SIZE or len(args.team2) > MAX_TEAM_SIZE):
+        print(f"Error: Each team can have at most {MAX_TEAM_SIZE} players (AoE2 {MAX_TEAM_SIZE}v{MAX_TEAM_SIZE} max).")
+        sys.exit(1)
+    if not rebalance_mode and not args.players:
+        print("Error: Provide player names, or use --team1 ... --team2 ... --weaker 1|2 for rebalance mode.")
+        sys.exit(1)
+    if not rebalance_mode and len(args.players) > MAX_TEAM_SIZE * 2:
+        print(f"Error: Too many players ({len(args.players)}). AoE2 supports a maximum of {MAX_TEAM_SIZE}v{MAX_TEAM_SIZE} ({MAX_TEAM_SIZE * 2} players).")
+        sys.exit(1)
+
+    all_player_ratings_data = load_player_ratings()
+    ts_env = trueskill.TrueSkill(beta=TS_BETA, draw_probability=TS_DRAW_PROBABILITY)
+
+    if rebalance_mode:
+        all_names = list(set(args.team1 + args.team2))
+        missing = [n for n in all_names if n not in all_player_ratings_data]
+        if missing:
+            print(f"Error: Players not found in ratings: {', '.join(missing)}")
+            sys.exit(1)
+        player_ts_ratings = {
+            n: trueskill.Rating(mu=all_player_ratings_data[n]['mu_unscaled'],
+                                sigma=all_player_ratings_data[n]['sigma_unscaled'])
+            for n in all_names
+        }
+        suggest_rebalances(args.team1, args.team2, args.weaker,
+                           player_ts_ratings, all_player_ratings_data, ts_env, top_n=args.top_n)
+        return
+
+    requested_player_names = sorted(list(set(args.players)))
 
     if len(requested_player_names) < 2:
         print("Error: Please provide at least two unique player names.")
         sys.exit(1)
-    
-    print(f"Attempting to balance teams for: {', '.join(requested_player_names)}")
-    # print(f"Using TrueSkill Beta: {TS_BETA:.4f}, Draw Probability: {TS_DRAW_PROBABILITY:.2f}\n")
 
-    all_player_ratings_data = load_player_ratings()
-    
+    print(f"Attempting to balance teams for: {', '.join(requested_player_names)}")
+
     player_ts_ratings: Dict[str, trueskill.Rating] = {}
     valid_player_names_for_balancing = []
     missing_players_from_ratings = []
@@ -134,9 +301,6 @@ def main():
         print("Error: Need at least two players with available ratings to form teams.")
         sys.exit(1)
 
-    # Initialize TrueSkill environment. Only beta and draw_probability from the env are used by quality().
-    ts_env = trueskill.TrueSkill(beta=TS_BETA, draw_probability=TS_DRAW_PROBABILITY)
-                                 
     # Filter player_ts_ratings to only include valid players for find_balanced_teams
     final_player_ts_ratings = {name: rating for name, rating in player_ts_ratings.items() if name in valid_player_names_for_balancing}
 
@@ -149,11 +313,17 @@ def main():
         print(f"(Based on TrueSkill Beta: {TS_BETA:.4f}, a configured draw probability of {TS_DRAW_PROBABILITY*100:.1f}% is used for rating updates)")
         print("Match Quality is the calculated probability of a draw. A higher percentage indicates a more balanced and unpredictable game.")
 
+        def fmt_player(name):
+            data = all_player_ratings_data[name]
+            avg_hc = data.get('avg_handicap_last_30', 100)
+            rec = recommended_handicap(data['mu_scaled'], avg_hc)
+            return f"{name} ({rec}%)"
+
         for i, (quality, team1_names_sorted, team2_names_sorted) in enumerate(balanced_teams):
             print(f"\n--- Suggestion #{i+1} ---")
             print(f"Match Quality: {quality*100:.2f}%")
-            print(f"  Team 1: {', '.join(team1_names_sorted)}")
-            print(f"  Team 2: {', '.join(team2_names_sorted)}")
+            print(f"  Team 1: {', '.join(fmt_player(n) for n in team1_names_sorted)}")
+            print(f"  Team 2: {', '.join(fmt_player(n) for n in team2_names_sorted)}")
 
             # Determine Expected Winner by comparing sum of ratings
             team1_mu_sum = sum(final_player_ts_ratings[name].mu for name in team1_names_sorted)

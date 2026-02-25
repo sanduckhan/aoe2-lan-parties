@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AoE2 — War Council</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="grain-overlay"></div>
+
+    <header>
+        <div class="header-content">
+            <div class="header-title">
+                <span class="header-icon">&#9876;</span>
+                <h1>War Council</h1>
+                <span class="header-subtitle">Age of Empires II &mdash; LAN Party</span>
+            </div>
+            <nav>
+                <button class="tab active" data-tab="ratings">Rankings</button>
+                <button class="tab" data-tab="generator">War Room</button>
+                <button class="tab" data-tab="game">Battle</button>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- Ratings Tab -->
+        <section id="ratings" class="tab-content active">
+            <div id="ratings-loading" class="loading-state">
+                <div class="loading-text">Summoning the champions...</div>
+            </div>
+            <div id="ratings-content" style="display:none">
+                <div class="section-header">
+                    <h2>Hall of Champions</h2>
+                    <p class="section-desc">Ranked warriors with proven valor</p>
+                </div>
+                <div class="table-wrapper">
+                    <table id="ranked-table">
+                        <thead>
+                            <tr>
+                                <th class="col-rank">#</th>
+                                <th class="col-name">Champion</th>
+                                <th class="col-rating">Rating</th>
+                                <th class="col-hc">Avg HC</th>
+                                <th class="col-hc">Rec. HC</th>
+                                <th class="col-games">Battles</th>
+                                <th class="col-conf">Confidence</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div id="provisional-section" style="display:none">
+                    <div class="ornament">&#10022;</div>
+                    <div class="section-header">
+                        <h2>Unproven Warriors</h2>
+                        <p class="section-desc">Less than <span id="min-games"></span> battles fought</p>
+                    </div>
+                    <div class="table-wrapper">
+                        <table id="provisional-table">
+                            <thead>
+                                <tr>
+                                    <th class="col-rank">#</th>
+                                    <th class="col-name">Warrior</th>
+                                    <th class="col-rating">Rating</th>
+                                    <th class="col-hc">Avg HC</th>
+                                    <th class="col-hc">Rec. HC</th>
+                                    <th class="col-games">Battles</th>
+                                    <th class="col-conf">Confidence</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Team Generator Tab -->
+        <section id="generator" class="tab-content">
+            <div class="generator-layout">
+                <div class="roster-panel">
+                    <div class="panel-header">
+                        <h2>Select Warriors</h2>
+                    </div>
+                    <div class="select-actions">
+                        <button onclick="selectAllPlayers()">All</button>
+                        <button onclick="clearAllPlayers()">None</button>
+                    </div>
+                    <div id="player-checkboxes" class="warrior-roster"></div>
+                    <div class="generate-actions">
+                        <button class="btn-primary" onclick="generateTeams()">Forge Balanced Teams</button>
+                        <button class="btn-secondary" onclick="goToManualSetup()">Manual Assignment</button>
+                    </div>
+                </div>
+                <div class="battle-plans">
+                    <div id="suggestions-placeholder" class="empty-state">
+                        <div class="empty-icon">&#9876;</div>
+                        <p>Select your warriors and forge balanced teams for battle.</p>
+                    </div>
+                    <div id="suggestions-content" style="display:none"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Game View Tab -->
+        <section id="game" class="tab-content">
+            <div id="game-empty" class="empty-state">
+                <div class="empty-icon">&#9873;</div>
+                <p>No battle configured. Visit the War Room to assemble your armies.</p>
+            </div>
+            <div id="game-content" style="display:none">
+                <div class="battle-header">
+                    <div class="quality-display">
+                        <span class="quality-label">Match Quality</span>
+                        <span class="quality-value" id="game-quality">-</span>
+                    </div>
+                    <div class="expected-display">
+                        Expected Victor: <strong id="game-expected">-</strong>
+                    </div>
+                </div>
+
+                <div class="battlefield">
+                    <div class="army army-1">
+                        <div class="army-banner">
+                            <h2>Team I</h2>
+                            <div class="army-avg">Avg Rating: <span id="t1-avg">-</span></div>
+                        </div>
+                        <div id="team1-players" class="army-roster"></div>
+                    </div>
+
+                    <div class="vs-divider">
+                        <span class="vs-symbol">&#9876;</span>
+                    </div>
+
+                    <div class="army army-2">
+                        <div class="army-banner">
+                            <h2>Team II</h2>
+                            <div class="army-avg">Avg Rating: <span id="t2-avg">-</span></div>
+                        </div>
+                        <div id="team2-players" class="army-roster"></div>
+                    </div>
+                </div>
+
+                <div id="rating-changes-section" style="display:none">
+                    <div class="ornament">&#10022;</div>
+                    <h3 class="changes-title">Potential Rating Changes</h3>
+                    <div class="changes-grid">
+                        <div class="changes-col">
+                            <div class="change-header">
+                                <span>Warrior</span>
+                                <div class="change-values">
+                                    <span>Win</span>
+                                    <span>Loss</span>
+                                </div>
+                            </div>
+                            <div id="t1-changes"></div>
+                        </div>
+                        <div class="changes-spacer"></div>
+                        <div class="changes-col">
+                            <div class="change-header">
+                                <span>Warrior</span>
+                                <div class="change-values">
+                                    <span>Win</span>
+                                    <span>Loss</span>
+                                </div>
+                            </div>
+                            <div id="t2-changes"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ornament">&#10022;</div>
+
+                <div class="rebalance-section">
+                    <h3>Which army was outmatched?</h3>
+                    <div class="rebalance-buttons">
+                        <button class="btn-secondary" onclick="markWeaker(1)">Team I was weaker</button>
+                        <button class="btn-secondary" onclick="markWeaker(2)">Team II was weaker</button>
+                    </div>
+                    <div id="rebalance-results" style="display:none"></div>
+                </div>
+            </div>
+
+            <!-- Manual Setup Sub-view -->
+            <div id="manual-setup" style="display:none">
+                <div class="section-header">
+                    <h2>Manual Assignment</h2>
+                    <p class="section-desc">Click warriors to cycle: Unassigned &rarr; Team I &rarr; Team II</p>
+                </div>
+                <div class="manual-layout">
+                    <div class="manual-col">
+                        <h3>Unassigned</h3>
+                        <div id="manual-unassigned" class="manual-list"></div>
+                    </div>
+                    <div class="manual-col team-col-1">
+                        <h3>Team I</h3>
+                        <div id="manual-team1" class="manual-list"></div>
+                    </div>
+                    <div class="manual-col team-col-2">
+                        <h3>Team II</h3>
+                        <div id="manual-team2" class="manual-list"></div>
+                    </div>
+                </div>
+                <div class="manual-actions">
+                    <button class="btn-primary" onclick="confirmManualSetup()">Commence Battle</button>
+                    <button class="btn-secondary" onclick="cancelManualSetup()">Retreat</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
