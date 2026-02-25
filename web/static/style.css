@@ -728,6 +728,69 @@ button:hover {
     font-size: 0.95rem;
 }
 
+/* Bench in suggestion cards */
+.card-bench {
+    padding: 0.5rem 0;
+    margin-top: 0.5rem;
+    border-top: 1px dashed var(--border);
+    font-size: 0.88rem;
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+.card-bench-label {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-right: 0.5rem;
+}
+
+/* Bench in game view */
+.bench-title {
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 1.25rem 0 0.75rem;
+}
+
+.bench-roster {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.bench-player {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.75rem;
+    background: var(--bg-card);
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    opacity: 0.7;
+}
+
+.bench-player .name {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.bench-rating {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
 /* Rating changes in suggestion cards */
 .card-changes-toggle {
     font-family: var(--font-body);

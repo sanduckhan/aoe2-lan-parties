@@ -174,53 +174,59 @@ def suggest_rebalances(team1_names: List[str], team2_names: List[str], weaker_te
         print(f"    Team {setup['weaker_team']} gains +{s['rating_gain']:.0f} rating  |  Match Quality: {s['match_quality']:.2f}%")
 
 
-def find_balanced_teams(player_ts_ratings: Dict[str, trueskill.Rating], ts_env: trueskill.TrueSkill, top_n: int = 3) -> List[Tuple[float, List[str], List[str]]]:
+def find_balanced_teams(player_ts_ratings: Dict[str, trueskill.Rating], ts_env: trueskill.TrueSkill, top_n: int = 3) -> List[Tuple[float, List[str], List[str], List[str]]]:
     """
     Finds the most balanced team combinations for a given list of players.
-    Returns a list of tuples: (quality_score, team1_names, team2_names)
+    When more than MAX_TEAM_SIZE*2 players are provided, some will be benched.
+    Returns a list of tuples: (quality_score, team1_names, team2_names, benched_names)
     """
-    players_in_game = list(player_ts_ratings.keys())
-    num_players = len(players_in_game)
-    
+    players = list(player_ts_ratings.keys())
+    num_players = len(players)
+
     if num_players < 2:
         print("Need at least 2 players to form two teams.")
         return []
 
-    if num_players > MAX_TEAM_SIZE * 2:
-        print(f"Error: Too many players ({num_players}). AoE2 supports a maximum of {MAX_TEAM_SIZE}v{MAX_TEAM_SIZE} ({MAX_TEAM_SIZE * 2} players).")
-        return []
-
     possible_matchups = []
     processed_matchups = set()
+    players_set = set(players)
+    needs_bench = num_players > MAX_TEAM_SIZE * 2
 
-    # Iterate through all possible team sizes for team 1 (capped at MAX_TEAM_SIZE)
-    for team1_size in range(1, min(num_players // 2, MAX_TEAM_SIZE) + 1):
-        # Iterate through all combinations for team 1 of that size
-        for team1_tuple in itertools.combinations(players_in_game, team1_size):
+    for team1_size in range(1, min(num_players, MAX_TEAM_SIZE) + 1):
+        for team1_tuple in itertools.combinations(players, team1_size):
             team1_names = list(team1_tuple)
-            team2_names = [p for p in players_in_game if p not in team1_names]
+            remaining = [p for p in players if p not in team1_names]
 
-            if len(team2_names) > MAX_TEAM_SIZE:
-                continue
+            if needs_bench:
+                # Allow benching: team2 can be any size from team1_size to MAX_TEAM_SIZE
+                min_t2 = team1_size
+                max_t2 = min(MAX_TEAM_SIZE, len(remaining))
+            else:
+                # No bench: team2 is everyone else (original behavior)
+                if len(remaining) > MAX_TEAM_SIZE or len(remaining) < 1:
+                    continue
+                min_t2 = len(remaining)
+                max_t2 = len(remaining)
 
-            # Create a canonical representation to avoid duplicates
-            canonical_matchup = tuple(sorted((tuple(sorted(team1_names)), tuple(sorted(team2_names)))))
-            if canonical_matchup in processed_matchups:
-                continue
-            processed_matchups.add(canonical_matchup)
+            for team2_size in range(min_t2, max_t2 + 1):
+                for team2_tuple in itertools.combinations(remaining, team2_size):
+                    team2_names = list(team2_tuple)
 
-            team1_ratings = tuple(player_ts_ratings[name] for name in team1_names)
-            team2_ratings = tuple(player_ts_ratings[name] for name in team2_names)
+                    canonical = tuple(sorted((tuple(sorted(team1_names)), tuple(sorted(team2_names)))))
+                    if canonical in processed_matchups:
+                        continue
+                    processed_matchups.add(canonical)
 
-            if not team1_ratings or not team2_ratings:
-                continue
+                    t1_ratings = tuple(player_ts_ratings[n] for n in team1_names)
+                    t2_ratings = tuple(player_ts_ratings[n] for n in team2_names)
 
-            quality = ts_env.quality([team1_ratings, team2_ratings])
-            possible_matchups.append((quality, sorted(team1_names), sorted(team2_names)))
+                    quality = ts_env.quality([t1_ratings, t2_ratings])
+                    benched = sorted(players_set - set(team1_names) - set(team2_names))
+                    possible_matchups.append((quality, sorted(team1_names), sorted(team2_names), benched))
 
-    # Sort all found matchups by quality, descending
-    possible_matchups.sort(key=lambda x: x[0], reverse=True)
-    
+    # Sort: fewest benched first (maximize players in game), then by quality descending
+    possible_matchups.sort(key=lambda x: (len(x[3]), -x[0]))
+
     return possible_matchups[:top_n]
 
 def main():
@@ -244,8 +250,7 @@ def main():
         print("Error: Provide player names, or use --team1 ... --team2 ... --weaker 1|2 for rebalance mode.")
         sys.exit(1)
     if not rebalance_mode and len(args.players) > MAX_TEAM_SIZE * 2:
-        print(f"Error: Too many players ({len(args.players)}). AoE2 supports a maximum of {MAX_TEAM_SIZE}v{MAX_TEAM_SIZE} ({MAX_TEAM_SIZE * 2} players).")
-        sys.exit(1)
+        print(f"Note: {len(args.players)} players selected. Some will be benched per suggestion (max {MAX_TEAM_SIZE}v{MAX_TEAM_SIZE}).")
 
     all_player_ratings_data = load_player_ratings()
     ts_env = trueskill.TrueSkill(beta=TS_BETA, draw_probability=TS_DRAW_PROBABILITY)
@@ -319,11 +324,13 @@ def main():
             rec = recommended_handicap(data['mu_scaled'], avg_hc)
             return f"{name} ({rec}%)"
 
-        for i, (quality, team1_names_sorted, team2_names_sorted) in enumerate(balanced_teams):
+        for i, (quality, team1_names_sorted, team2_names_sorted, benched_names) in enumerate(balanced_teams):
             print(f"\n--- Suggestion #{i+1} ---")
             print(f"Match Quality: {quality*100:.2f}%")
             print(f"  Team 1: {', '.join(fmt_player(n) for n in team1_names_sorted)}")
             print(f"  Team 2: {', '.join(fmt_player(n) for n in team2_names_sorted)}")
+            if benched_names:
+                print(f"  Benched: {', '.join(benched_names)}")
 
             # Determine Expected Winner by comparing sum of ratings
             team1_mu_sum = sum(final_player_ts_ratings[name].mu for name in team1_names_sorted)

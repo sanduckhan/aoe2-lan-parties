@@ -37,6 +37,7 @@ const state = {
     allPlayers: [],
     currentTeam1: [],
     currentTeam2: [],
+    benched: [],
     ratingChanges: {},
     matchQuality: null,
     expectedWinner: null,
@@ -722,6 +723,11 @@ function renderSuggestions(data) {
                     </ul>
                 </div>
             </div>
+            ${s.benched && s.benched.length > 0 ? `
+            <div class="card-bench">
+                <span class="card-bench-label">Resting:</span>
+                <span class="card-bench-names">${s.benched.map(p => p.name).join(', ')}</span>
+            </div>` : ''}
             ${changesHtml}
             <div class="card-footer">
                 <span class="card-expected">Expected: ${s.expected_winner}</span>
@@ -757,6 +763,7 @@ function useSetup(suggestion) {
     SoundFX.horn();
     state.currentTeam1 = suggestion.team1;
     state.currentTeam2 = suggestion.team2;
+    state.benched = suggestion.benched || [];
     state.ratingChanges = suggestion.rating_changes || {};
     state.matchQuality = suggestion.match_quality;
     state.expectedWinner = suggestion.expected_winner;
@@ -783,6 +790,24 @@ function renderGameView() {
         state.currentTeam1.map(p => playerCard(p)).join('');
     document.getElementById('team2-players').innerHTML =
         state.currentTeam2.map(p => playerCard(p)).join('');
+
+    const benchEl = document.getElementById('bench-section');
+    if (state.benched && state.benched.length > 0) {
+        benchEl.style.display = '';
+        benchEl.innerHTML = `
+            <div class="bench-title">Resting Warriors</div>
+            <div class="bench-roster">
+                ${state.benched.map(p => `
+                    <div class="bench-player">
+                        <span class="name"><a class="player-link" onclick="openPlayerProfile('${p.name}')">${p.name}</a></span>
+                        <span class="bench-rating">${p.rating.toFixed(0)}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } else {
+        benchEl.style.display = 'none';
+    }
 
     const hasChanges = Object.keys(state.ratingChanges).length > 0;
     document.getElementById('rating-changes-section').style.display = hasChanges ? '' : 'none';

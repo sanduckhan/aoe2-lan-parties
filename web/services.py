@@ -169,10 +169,15 @@ def generate_teams(
     balanced = find_balanced_teams(player_ts_ratings, ts_env, top_n=top_n)
 
     suggestions = []
-    for quality, t1, t2 in balanced:
-        suggestions.append(
-            _enrich_suggestion(quality, t1, t2, ratings_data, player_ts_ratings, ts_env)
+    for quality, t1, t2, benched in balanced:
+        enriched = _enrich_suggestion(
+            quality, t1, t2, ratings_data, player_ts_ratings, ts_env
         )
+        enriched["benched"] = [
+            {"name": n, "rating": round(ratings_data[n]["mu_scaled"], 1)}
+            for n in benched
+        ]
+        suggestions.append(enriched)
 
     return {"suggestions": suggestions, "warnings": warnings}
 
