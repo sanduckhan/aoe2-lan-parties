@@ -57,3 +57,46 @@ def api_rebalance_teams():
     if "error" in result:
         return jsonify(result), 400
     return jsonify(result)
+
+
+@app.route("/api/awards")
+def api_awards():
+    try:
+        return jsonify(services.get_awards_for_api())
+    except FileNotFoundError:
+        return jsonify({"error": "analysis_data.json not found. Run main.py first."}), 404
+
+
+@app.route("/api/games")
+def api_games():
+    try:
+        return jsonify(services.get_games_for_api())
+    except FileNotFoundError:
+        return jsonify({"error": "analysis_data.json not found. Run main.py first."}), 404
+
+
+@app.route("/api/stats")
+def api_stats():
+    try:
+        return jsonify(services.get_stats_for_api())
+    except FileNotFoundError:
+        return jsonify({"error": "analysis_data.json not found. Run main.py first."}), 404
+
+
+@app.route("/api/player/<name>")
+def api_player_profile(name):
+    try:
+        profile = services.get_player_profile_for_api(name)
+        if profile is None:
+            return jsonify({"error": f"Player '{name}' not found"}), 404
+        return jsonify(profile)
+    except FileNotFoundError:
+        return jsonify({"error": "analysis_data.json not found. Run main.py first."}), 404
+
+
+@app.route("/api/rating-history")
+def api_rating_history():
+    try:
+        return jsonify(services.get_rating_history_for_api())
+    except FileNotFoundError:
+        return jsonify({"error": "rating_history.json not found. Run calculate_trueskill.py first."}), 404

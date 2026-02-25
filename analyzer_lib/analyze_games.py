@@ -1,10 +1,7 @@
 import os
 from collections import defaultdict
-from datetime import timedelta, datetime
-from . import config # Added import
-# NON_MILITARY_UNITS = {"Villager", "Fishing Ship"} # Removed
-from mgz.model import parse_match
-import re
+from . import config
+from .replay_parser import get_datetime_from_filename, parse_replays_parallel
 
 # --- Configuration ---
 # RECORDED_GAMES_DIR = 'recorded_games' # Removed
@@ -46,53 +43,6 @@ game_stats = {
 }
 
 
-def _get_datetime_from_filename(filename):
-    """Extracts datetime from filename to allow chronological sorting."""
-    match = re.search(r'@(\d{4}\.\d{2}\.\d{2} \d{6})', filename)
-    if match:
-        datetime_str = match.group(1)
-        try:
-            return datetime.strptime(datetime_str, '%Y.%m.%d %H%M%S')
-        except ValueError:
-            return datetime.min # Should not happen with this regex
-    return datetime.min # Files without a timestamp processed first
-
-
-# --- Main Logic ---
-def parse_replay_file(file_path, filename):
-    """
-    Parses a single replay file and performs initial validation.
-
-    Args:
-        file_path (str): The full path to the replay file.
-        filename (str): The name of the replay file (for logging).
-
-    Returns:
-        mgz.model.Match or None: The parsed match object if successful and valid, 
-                                 None otherwise.
-    """
-    print(f"Analyzing: {filename}")
-    try:
-        with open(file_path, 'rb') as f:
-            match = parse_match(f)
-
-        if not match:
-            print(f"  -> Skipping file {filename}: Could not find match data.")
-            return None
-
-        duration_seconds = match.duration.total_seconds()
-        # Filter out games shorter than 5 minutes (300 seconds)
-        if duration_seconds < 300:
-            print(f"  -> Skipping file {filename}: Game duration ({timedelta(seconds=int(duration_seconds))}) is less than 5 minutes.\n")
-            return None
-        
-        return match
-    except FileNotFoundError:
-        print(f"  -> Skipping file {filename}: File not found at '{file_path}'.")
-        return None
-    except Exception as e:
-        print(f"  -> Skipping file {filename}: Error parsing - {e}")
-        return None
 
 
 def _update_general_game_stats(duration_seconds, filename, game_stats):
@@ -199,7 +149,7 @@ def _update_player_core_stats(player, match_obj, is_winner, winning_team_id, dur
     else:
         player_stats[player_name]['civ_losses'][civ_name] += 1
     
-    player_game_chronology[player_name].append({'won': is_winner, 'timestamp': match_obj.timestamp})
+    player_game_chronology[player_name].append({'won': is_winner, 'has_winner': winning_team_id is not None, 'timestamp': match_obj.timestamp})
 
 
 def _update_team_matchup_stats(teams_data, winning_team_id, game_stats):
@@ -345,6 +295,8 @@ def _calculate_losing_streaks(player_game_chronology, player_stats):
         current_streak = 0
         max_streak = 0
         for game in sorted_games:
+            if not game.get('has_winner', True):
+                continue  # skip games with no clear winner
             if not game['won']:
                 current_streak += 1
             else:
@@ -354,38 +306,49 @@ def _calculate_losing_streaks(player_game_chronology, player_stats):
         player_stats[player_name]['max_losing_streak'] = max_streak
 
 
-def analyze_all_games():
-    """Loops through recorded games, parses them, and aggregates stats."""
-    if not os.path.isdir(config.RECORDED_GAMES_DIR):
-        print(f"Error: Directory '{config.RECORDED_GAMES_DIR}' not found.")
-        return
+def analyze_all_games(parsed_matches=None):
+    """Loops through recorded games, parses them, and aggregates stats.
 
-    print(f"--- Starting Analysis of Games in '{config.RECORDED_GAMES_DIR}' ---")
-    player_game_chronology = defaultdict(list) # To store game results chronologically per player
+    Args:
+        parsed_matches: Optional list of (filename, match_obj) tuples from
+            parse_replays_parallel(). If None, parses replays automatically.
 
-    replay_files = [f for f in os.listdir(config.RECORDED_GAMES_DIR) if f.endswith('.aoe2record')]
-    replay_files.sort(key=_get_datetime_from_filename) # Sort files chronologically
+    Returns:
+        tuple: (player_stats, game_stats, game_results, head_to_head) or None on error.
+    """
+    if parsed_matches is None:
+        parsed_matches = parse_replays_parallel()
 
-    total_files = len(replay_files)
-    print(f"Found {total_files} replay files to analyze.")
+    if not parsed_matches:
+        print("No valid games to analyze.")
+        return None
 
-    for filename in replay_files:
-        file_path = os.path.join(config.RECORDED_GAMES_DIR, filename)
-        match = parse_replay_file(file_path, filename)
+    print(f"--- Starting Analysis of {len(parsed_matches)} Games ---")
+    player_game_chronology = defaultdict(list)
+    game_results = []
+    head_to_head = defaultdict(lambda: defaultdict(lambda: {"wins": 0, "losses": 0}))
 
-        if not match:
-            continue
-        
-        # Try block for analyzing the successfully parsed match data
+    canonical_player_names = set(config.PLAYER_ALIASES.values())
+
+    for filename, match in parsed_matches:
         try:
             duration_seconds = match.duration.total_seconds()
             human_players_from_match = [p for p in match.players if hasattr(p, 'profile_id') and p.profile_id is not None]
 
+            # --- Skip games with unknown players ---
+            skip_game = False
+            for p in human_players_from_match:
+                aliased = config.PLAYER_ALIASES.get(p.name, p.name)
+                if aliased not in canonical_player_names:
+                    print(f"  -> Skipping {filename}: unknown player '{p.name}' (resolved '{aliased}')")
+                    skip_game = True
+                    break
+            if skip_game:
+                continue
+
             # --- Apply Player Aliases ---
             for player in human_players_from_match:
                 player.name = config.PLAYER_ALIASES.get(player.name, player.name)
-
-            human_player_names_in_match = {p.name for p in human_players_from_match}
 
             # --- Aggregate General Game Stats ---
             _update_general_game_stats(duration_seconds, filename, game_stats)
@@ -404,6 +367,38 @@ def analyze_all_games():
             # --- Action-Based Stats (Units, Market, Walls, Techs, etc.) ---
             _process_action_based_stats(match, human_players_from_match, player_stats, game_stats)
 
+            # --- Collect per-game results for web UI ---
+            game_result_teams = {}
+            for tid, players_in_team in teams_data.items():
+                game_result_teams[str(tid)] = [
+                    {
+                        "name": p.name,
+                        "civilization": getattr(p, 'civilization', 'Unknown'),
+                        "winner": bool(player_outcomes.get(p.name, False)),
+                    }
+                    for p in players_in_team
+                ]
+            game_results.append({
+                "filename": filename,
+                "datetime": get_datetime_from_filename(filename).isoformat(),
+                "duration_seconds": duration_seconds,
+                "winning_team_id": str(winning_team_id) if winning_team_id is not None else None,
+                "teams": game_result_teams,
+            })
+
+            # --- Head-to-head tracking ---
+            if winning_team_id is not None and len(teams_data) == 2:
+                team_ids = list(teams_data.keys())
+                winners = [p.name for p in teams_data[winning_team_id]]
+                losers = []
+                for tid in team_ids:
+                    if tid != winning_team_id:
+                        losers = [p.name for p in teams_data[tid]]
+                for w in winners:
+                    for l in losers:
+                        head_to_head[w][l]["wins"] += 1
+                        head_to_head[l][w]["losses"] += 1
+
         except Exception as e:
             print(f"  -> Error analyzing data for {filename} (after parsing): {e}")
     print(f"--- Analysis Complete ---")
@@ -411,4 +406,4 @@ def analyze_all_games():
     # --- Calculate Losing Streaks ---
     _calculate_losing_streaks(player_game_chronology, player_stats)
 
-    return player_stats, game_stats
+    return player_stats, game_stats, game_results, head_to_head

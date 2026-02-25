@@ -8,6 +8,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/chart.min.js"></script>
+    <script src="/static/hammer.min.js"></script>
+    <script src="/static/chartjs-plugin-zoom.min.js"></script>
 </head>
 <body>
     <div class="grain-overlay"></div>
@@ -19,11 +22,18 @@
                 <h1>War Council</h1>
                 <span class="header-subtitle">Age of Empires II &mdash; LAN Party</span>
             </div>
-            <nav>
-                <button class="tab active" data-tab="ratings">Rankings</button>
-                <button class="tab" data-tab="generator">War Room</button>
-                <button class="tab" data-tab="game">Battle</button>
-            </nav>
+            <div class="nav-row">
+                <nav>
+                    <button class="tab active" data-tab="ratings">Rankings</button>
+                    <button class="tab" data-tab="awards">Hall of Fame</button>
+                    <button class="tab" data-tab="history">Chronicles</button>
+                    <button class="tab" data-tab="generator">War Room</button>
+                    <button class="tab" data-tab="game">Battle</button>
+                </nav>
+                <button class="sound-toggle" onclick="toggleSound()" title="Toggle sounds">
+                    <span id="sound-icon">&#x1F50A;</span>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -77,6 +87,51 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Rating Evolution Chart -->
+                <div class="ornament">&#10022;</div>
+                <div class="section-header">
+                    <h2>Rating Evolution</h2>
+                    <p class="section-desc">The rise and fall of champions</p>
+                </div>
+                <div class="chart-controls">
+                    <div id="chart-player-toggles" class="chart-toggles"></div>
+                    <button class="btn-secondary btn-small" id="reset-zoom-btn" onclick="resetChartZoom()" style="display:none">Reset Zoom</button>
+                </div>
+                <div class="chart-container">
+                    <canvas id="rating-chart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Awards Tab -->
+        <section id="awards" class="tab-content">
+            <div id="awards-loading" class="loading-state">
+                <div class="loading-text">Unveiling the legends...</div>
+            </div>
+            <div id="awards-content" style="display:none">
+                <div class="section-header">
+                    <h2>Hall of Fame</h2>
+                    <p class="section-desc">Feats of glory, folly, and valor</p>
+                </div>
+                <div class="awards-grid" id="awards-grid"></div>
+            </div>
+        </section>
+
+        <!-- Game History Tab -->
+        <section id="history" class="tab-content">
+            <div id="history-loading" class="loading-state">
+                <div class="loading-text">Unrolling the chronicles...</div>
+            </div>
+            <div id="history-content" style="display:none">
+                <div class="section-header">
+                    <h2>Battle Chronicles</h2>
+                    <p class="section-desc">A record of all engagements</p>
+                </div>
+                <div class="history-controls">
+                    <input type="text" id="history-filter" placeholder="Filter by warrior name..." class="history-search">
+                </div>
+                <div id="history-list" class="history-list"></div>
             </div>
         </section>
 
@@ -212,6 +267,17 @@
                 </div>
             </div>
         </section>
+
+        <!-- Player Profile Modal -->
+        <div id="player-modal" class="modal-overlay" style="display:none" onclick="closePlayerModal(event)">
+            <div class="modal-content" onclick="event.stopPropagation()">
+                <button class="modal-close" onclick="closePlayerModal()">&times;</button>
+                <div id="modal-loading" class="loading-state">
+                    <div class="loading-text">Summoning warrior profile...</div>
+                </div>
+                <div id="modal-body" style="display:none"></div>
+            </div>
+        </div>
     </main>
 
     <script src="/static/app.js"></script>

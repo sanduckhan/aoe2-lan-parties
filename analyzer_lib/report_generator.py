@@ -361,3 +361,218 @@ def print_report(player_stats, game_stats):
     _print_player_civilization_performance(player_stats)
 
     _print_overall_civilization_popularity(game_stats)
+
+
+# --- Pure data computation functions for web API ---
+
+EXCLUDED_UNITS = {'Palisade Wall', 'Stone Wall', 'Farm', 'Villager', 'City Wall', 'Goat', 'Town Center', 'Sheep', 'City Gate'}
+
+
+def _compute_ranked_stat(player_stats, stat_key):
+    """Generic helper for awards that rank by a single stat (walls, buildings deleted, etc.)."""
+    entries = [
+        {"player": p, "count": s[stat_key]}
+        for p, s in player_stats.items()
+        if s[stat_key] > 0
+    ]
+    entries.sort(key=lambda x: x["count"], reverse=True)
+    return entries[:2]
+
+
+def _compute_favorite_unit_fanatic(player_stats):
+    result = []
+    for player_name, stats in player_stats.items():
+        if not stats['units_created']:
+            continue
+        filtered = {u: c for u, c in stats['units_created'].items() if u not in EXCLUDED_UNITS}
+        if filtered:
+            unit, count = max(filtered.items(), key=lambda x: x[1])
+            result.append({"player": player_name, "unit": unit, "count": count})
+    result.sort(key=lambda x: x["count"], reverse=True)
+    return result
+
+
+def _compute_bitter_salt_baron(player_stats):
+    entries = [
+        {"player": p, "streak": s.get("max_losing_streak", 0)}
+        for p, s in player_stats.items()
+        if s.get("max_losing_streak", 0) > 0
+    ]
+    entries.sort(key=lambda x: x["streak"], reverse=True)
+    return entries[:2]
+
+
+def _compute_market_mogul(player_stats):
+    entries = [
+        {"player": p, "transactions": s["market_transactions"],
+         "units_traded": s.get("total_resource_units_traded", 0)}
+        for p, s in player_stats.items()
+        if s["market_transactions"] > 0
+    ]
+    entries.sort(key=lambda x: x["transactions"], reverse=True)
+    return entries[:2]
+
+
+def _compute_forgetful_upgrades(player_stats):
+    result = []
+    for player_name, stats in player_stats.items():
+        if not player_name:
+            continue
+        gp = stats['games_played']
+        if gp < 5:
+            continue
+        num_upgrades = len(config.CRUCIAL_UPGRADES)
+        if num_upgrades == 0:
+            continue
+        total_forget = 0.0
+        details = {}
+        for tech in config.CRUCIAL_UPGRADES:
+            researched = stats['crucial_researched'].get(tech, 0)
+            forget_pct = ((gp - researched) / gp) * 100
+            total_forget += forget_pct
+            details[tech] = round((researched / gp) * 100, 1)
+        avg = total_forget / num_upgrades
+        result.append({
+            "player": player_name,
+            "avg_forgetfulness": round(avg, 1),
+            "details": details,
+        })
+    result.sort(key=lambda x: x["avg_forgetfulness"], reverse=True)
+    return result[:2]
+
+
+def _compute_apm_award(player_stats):
+    entries = []
+    for player_name, stats in player_stats.items():
+        if not player_name:
+            continue
+        if stats.get('games_with_eapm', 0) < 5:
+            continue
+        avg = stats['total_eapm'] / stats['games_with_eapm']
+        entries.append({"player": player_name, "avg_eapm": round(avg, 1)})
+    entries.sort(key=lambda x: x["avg_eapm"], reverse=True)
+    return entries[:2]
+
+
+def _compute_most_balanced_matchup(game_stats):
+    MIN_GAMES_FOR_BALANCE = 3
+    relevant = {
+        k: v for k, v in game_stats.get('team_matchups', {}).items()
+        if (v.get('wins_A', 0) + v.get('wins_B', 0)) >= MIN_GAMES_FOR_BALANCE
+    }
+    if not relevant:
+        MIN_GAMES_FOR_BALANCE = 1
+        relevant = {
+            k: v for k, v in game_stats.get('team_matchups', {}).items()
+            if (v.get('wins_A', 0) + v.get('wins_B', 0)) >= MIN_GAMES_FOR_BALANCE
+        }
+    valid = [
+        v for v in relevant.values()
+        if isinstance(v.get('rosters'), (list, tuple)) and len(v['rosters']) == 2
+        and isinstance(v['rosters'][0], (list, tuple)) and isinstance(v['rosters'][1], (list, tuple))
+    ]
+    if not valid:
+        return None
+    best = min(valid, key=lambda v: (abs(v['wins_A'] - v['wins_B']), -(v['wins_A'] + v['wins_B'])))
+    return {
+        "team_a": sorted(list(best['rosters'][0])),
+        "team_b": sorted(list(best['rosters'][1])),
+        "wins_a": best['wins_A'],
+        "wins_b": best['wins_B'],
+    }
+
+
+def compute_all_awards(player_stats, game_stats):
+    """Compute all 8 awards as structured data for the web API."""
+    return {
+        "favorite_unit_fanatic": _compute_favorite_unit_fanatic(player_stats),
+        "bitter_salt_baron": _compute_bitter_salt_baron(player_stats),
+        "wall_street_tycoon": _compute_ranked_stat(player_stats, "wall_segments_built"),
+        "demolition_expert": _compute_ranked_stat(player_stats, "buildings_deleted"),
+        "market_mogul": _compute_market_mogul(player_stats),
+        "forgetful_upgrades": _compute_forgetful_upgrades(player_stats),
+        "jittery_fingers": _compute_apm_award(player_stats),
+        "balanced_matchup": _compute_most_balanced_matchup(game_stats),
+    }
+
+
+def compute_general_stats(game_stats):
+    """Compute general game statistics as structured data for the web API."""
+    total = game_stats['total_games']
+    avg_dur = game_stats['total_duration_seconds'] / total if total > 0 else 0
+    sorted_civs = sorted(game_stats['overall_civ_picks'].items(), key=lambda x: x[1], reverse=True)
+    return {
+        "total_games": total,
+        "total_duration_seconds": game_stats['total_duration_seconds'],
+        "total_duration_display": str(timedelta(seconds=int(game_stats['total_duration_seconds']))),
+        "avg_duration_seconds": avg_dur,
+        "avg_duration_display": str(timedelta(seconds=int(avg_dur))),
+        "longest_game": {
+            "duration_seconds": game_stats['longest_game']['duration_seconds'],
+            "duration_display": str(timedelta(seconds=int(game_stats['longest_game']['duration_seconds']))),
+            "file": game_stats['longest_game']['file'],
+        },
+        "total_units_created": game_stats['total_units_created_overall'],
+        "civ_popularity": [{"name": name, "picks": count} for name, count in sorted_civs[:10]],
+    }
+
+
+def compute_player_profiles(player_stats, head_to_head):
+    """Compute detailed player profiles as structured data for the web API."""
+    profiles = {}
+    for name, stats in player_stats.items():
+        if not name:
+            continue
+        gp = stats['games_played']
+        gfwr = stats.get('games_for_win_rate', 0)
+        win_rate = (stats['wins'] / gfwr * 100) if gfwr > 0 else 0
+        avg_eapm = (stats['total_eapm'] / stats['games_with_eapm']) if stats.get('games_with_eapm', 0) > 0 else None
+
+        # Civilization stats
+        civs = []
+        for civ_name, times_played in stats['civs_played'].items():
+            civ_wr_games = stats['civ_games_for_win_rate'].get(civ_name, 0)
+            civ_wr = (stats['civ_wins'].get(civ_name, 0) / civ_wr_games * 100) if civ_wr_games > 0 else 0
+            civs.append({
+                "name": civ_name,
+                "games": times_played,
+                "wins": stats['civ_wins'].get(civ_name, 0),
+                "losses": stats['civ_losses'].get(civ_name, 0),
+                "win_rate": round(civ_wr, 1),
+            })
+        civs.sort(key=lambda c: c["games"], reverse=True)
+
+        # Top units
+        filtered_units = {u: c for u, c in stats['units_created'].items() if u not in EXCLUDED_UNITS}
+        top_units = sorted(filtered_units.items(), key=lambda x: x[1], reverse=True)[:10]
+
+        # Head-to-head
+        h2h = []
+        if name in head_to_head:
+            for opponent, record in head_to_head[name].items():
+                total = record["wins"] + record["losses"]
+                if total > 0:
+                    h2h.append({
+                        "opponent": opponent,
+                        "wins": record["wins"],
+                        "losses": record["losses"],
+                        "games": total,
+                    })
+            h2h.sort(key=lambda x: x["games"], reverse=True)
+
+        profiles[name] = {
+            "name": name,
+            "games_played": gp,
+            "wins": stats['wins'],
+            "games_for_win_rate": gfwr,
+            "win_rate": round(win_rate, 1),
+            "total_playtime_seconds": stats['total_playtime_seconds'],
+            "total_playtime_display": str(timedelta(seconds=int(stats['total_playtime_seconds']))),
+            "avg_eapm": round(avg_eapm, 1) if avg_eapm else None,
+            "max_losing_streak": stats.get('max_losing_streak', 0),
+            "total_units_created": stats['total_units_created'],
+            "civilizations": civs,
+            "top_units": [{"name": u, "count": c} for u, c in top_units],
+            "head_to_head": h2h,
+        }
+    return profiles

@@ -19,6 +19,7 @@ PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 sys.path.append(PROJECT_ROOT)
 
 from analyzer_lib import config
+from analyzer_lib.replay_parser import get_datetime_from_filename, parse_replays_parallel
 
 # --- Logging Setup ---
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -33,12 +34,16 @@ class PlayerRating:
         self.name = name
         self.rating: trueskill.Rating = initial_rating
         self.games_played: int = 0
+        self.games_rated: int = 0
 
     def update_rating(self, new_rating: trueskill.Rating):
         self.rating = new_rating
 
     def increment_games_played(self):
         self.games_played += 1
+
+    def increment_games_rated(self):
+        self.games_rated += 1
 
     def get_scaled_mu(self) -> float:
         return self.rating.mu * config.TRUESKILL_ELO_SCALING_FACTOR
@@ -58,18 +63,6 @@ class GameData:
         self.human_players = human_players
         self.teams_data = teams_data
         self.winning_team_id = winning_team_id
-
-    @staticmethod
-    def _get_datetime_from_filename(filename: str) -> datetime:
-        match = re.search(r'@(\d{4}\.\d{2}\.\d{2} \d{6})', filename)
-        if match:
-            datetime_str = match.group(1)
-            try:
-                return datetime.strptime(datetime_str, '%Y.%m.%d %H%M%S')
-            except ValueError:
-                logging.warning(f"Could not parse datetime from {filename}, using min datetime.")
-                return datetime.min
-        return datetime.min
 
     @staticmethod
     def _apply_player_aliases(players: List[MgzPlayer], aliases: Dict[str, str]) -> List[MgzPlayer]:
@@ -126,7 +119,7 @@ class GameData:
 
             human_players = cls._apply_player_aliases(human_players, player_aliases)
             winning_team_id, teams_data = cls._determine_game_outcomes(human_players)
-            datetime_obj = cls._get_datetime_from_filename(filename)
+            datetime_obj = get_datetime_from_filename(filename)
 
             return cls(filename, datetime_obj, human_players, teams_data, winning_team_id)
 
@@ -135,6 +128,35 @@ class GameData:
             return None
         except Exception as e:
             logging.warning(f"Skipping file {filename}: Error parsing - {e}")
+            return None
+
+    @classmethod
+    def from_parsed_match(cls, filename: str, match_obj, player_aliases: Dict[str, str]) -> Optional['GameData']:
+        """Create GameData from an already-parsed match object (avoids re-parsing)."""
+        try:
+            human_players = [p for p in match_obj.players if not (hasattr(p, 'ai') and p.ai)]
+            if len(human_players) < 2:
+                logging.debug(f"Skipping game {filename}: Not enough human players ({len(human_players)}).")
+                return None
+
+            canonical_player_names = set(config.PLAYER_ALIASES.values())
+            for p in human_players:
+                aliased_name = config.PLAYER_ALIASES.get(p.name, p.name)
+                if aliased_name not in canonical_player_names:
+                    logging.warning(
+                        f"Skipping game {filename}: Player '{p.name}' (resolved to '{aliased_name}') "
+                        f"is not a recognized player."
+                    )
+                    return None
+
+            human_players = cls._apply_player_aliases(human_players, player_aliases)
+            winning_team_id, teams_data = cls._determine_game_outcomes(human_players)
+            datetime_obj = get_datetime_from_filename(filename)
+
+            return cls(filename, datetime_obj, human_players, teams_data, winning_team_id)
+
+        except Exception as e:
+            logging.warning(f"Skipping game {filename}: {e}")
             return None
 
     def get_player_handicaps(self) -> Dict[str, int]:
@@ -203,6 +225,7 @@ class TrueSkillCalculator:
 
             for player_name in team1_ratings_dict.keys():
                 player_rating_obj = self.get_or_create_player_rating(player_name)
+                player_rating_obj.increment_games_rated()
                 old_mu_scaled = player_rating_obj.get_scaled_mu()
                 old_sigma_scaled = player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
 
@@ -225,10 +248,12 @@ class TrueSkillCalculator:
                     'mu': player_rating_obj.get_scaled_mu(),
                     'sigma': player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR,
                     'handicap': handicap,
+                    'datetime': game_data.datetime_obj,
                 })
 
             for player_name in team2_ratings_dict.keys():
                 player_rating_obj = self.get_or_create_player_rating(player_name)
+                player_rating_obj.increment_games_rated()
                 old_mu_scaled = player_rating_obj.get_scaled_mu()
                 old_sigma_scaled = player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
 
@@ -251,6 +276,7 @@ class TrueSkillCalculator:
                     'mu': player_rating_obj.get_scaled_mu(),
                     'sigma': player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR,
                     'handicap': handicap,
+                    'datetime': game_data.datetime_obj,
                 })
 
         except Exception as e:
@@ -270,8 +296,8 @@ class ReportGenerator:
         
         all_players_sorted = sorted(player_ratings_map.values(), key=lambda p: p.rating.mu, reverse=True)
 
-        ranked_players = [p for p in all_players_sorted if p.games_played >= min_games_for_ranking]
-        provisional_players = [p for p in all_players_sorted if p.games_played < min_games_for_ranking]
+        ranked_players = [p for p in all_players_sorted if p.games_rated >= min_games_for_ranking]
+        provisional_players = [p for p in all_players_sorted if p.games_rated < min_games_for_ranking]
 
         print("\n--- Final TrueSkill Player Rankings ({} or more games) ---".format(min_games_for_ranking))
         print("  Rank  Player               Mu (μ)     Confidence   Games")
@@ -294,7 +320,7 @@ class ReportGenerator:
                 print(f"        {p_rating.name:<20} {mu_scaled:<10.2f} {confidence:>9.1f}%   {p_rating.games_played:>5}")
         print("\n  Higher Confidence indicates a more stable Mu (μ) rating.")
 
-    def plot_rating_evolution(self, rating_history: List[Dict[str, Any]], output_filename: str = 'trueskill_evolution.png'):
+    def plot_rating_evolution(self, rating_history: List[Dict[str, Any]], lan_events: List[Dict[str, Any]] = None, output_filename: str = 'trueskill_evolution.png'):
         if not rating_history:
             logging.info("No rating history recorded, skipping plot generation.")
             return
@@ -351,6 +377,20 @@ class ReportGenerator:
         plt.xticks(fontsize=12)
         plt.yticks(fontsize=12)
         plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+
+        # Draw LAN event markers
+        if lan_events:
+            y_min, y_max = plt.ylim()
+            for event in lan_events:
+                plt.axvspan(event['game_index_start'] - 0.5, event['game_index_end'] + 0.5,
+                           alpha=0.08, color='#c9a84c', zorder=0)
+                plt.axvline(x=event['game_index_start'], color='#c9a84c', linestyle='--',
+                           alpha=0.4, linewidth=1, zorder=1)
+                mid = (event['game_index_start'] + event['game_index_end']) / 2
+                plt.text(mid, y_max - (y_max - y_min) * 0.02, event['label'],
+                        ha='center', va='top', fontsize=7, color='#b08930',
+                        fontweight='bold', rotation=90)
+
         plt.tight_layout(rect=[0, 0, 0.85, 1])
 
         try:
@@ -365,7 +405,7 @@ class ReportGenerator:
             plt.close()
 
     def save_ratings_to_json(self, player_ratings_map: Dict[str, PlayerRating], rating_history: List[Dict[str, Any]],
-                             output_filename: str = "player_ratings.json"):
+                             lan_events: List[Dict[str, Any]] = None, output_filename: str = "player_ratings.json"):
         """Saves the player ratings to a JSON file."""
         ratings_list = []
         for player_name, player_rating_obj in player_ratings_map.items():
@@ -380,6 +420,7 @@ class ReportGenerator:
                 "mu_unscaled": round(player_rating_obj.rating.mu, 4),
                 "sigma_unscaled": round(player_rating_obj.rating.sigma, 4),
                 "games_played": player_rating_obj.games_played,
+                "games_rated": player_rating_obj.games_rated,
                 "confidence_percent": round(player_rating_obj.get_confidence_percent(self.initial_unscaled_sigma), 1),
                 "avg_handicap_last_30": avg_handicap_last_30,
             }
@@ -397,22 +438,110 @@ class ReportGenerator:
         except Exception as e:
             logging.error(f"Error saving player ratings to JSON: {e}")
 
-def main():
-    logging.info("--- Starting TrueSkill Calculation (Refactored) ---")
-    recorded_games_path = os.path.join(PROJECT_ROOT, config.RECORDED_GAMES_DIR)
-    if not os.path.exists(recorded_games_path):
-        logging.error(f"Recorded games directory not found at {recorded_games_path}")
+        # Save rating history for the web UI chart
+        history_path = os.path.join(PROJECT_ROOT, "rating_history.json")
+        try:
+            serializable_history = [
+                {
+                    "game_index": h["game_index"],
+                    "player_name": h["player_name"],
+                    "mu": round(h["mu"], 2),
+                    "sigma": round(h["sigma"], 2),
+                }
+                for h in rating_history
+            ]
+            data = {
+                "history": serializable_history,
+                "lan_events": lan_events or [],
+            }
+            with open(history_path, 'w') as f:
+                json.dump(data, f)
+            logging.info(f"Rating history saved to: {history_path}")
+        except Exception as e:
+            logging.error(f"Error saving rating history to JSON: {e}")
+
+def detect_lan_events(rating_history, min_player_games=10):
+    """Detect LAN party events from clusters of games played within a few days.
+
+    A LAN event is a group of dates (at most 2-day gaps between consecutive days)
+    where at least one player participated in ``min_player_games`` or more games.
+    """
+    # Build game_index -> (datetime, set of players) mappings
+    game_dates = {}
+    game_players = defaultdict(set)
+    for h in rating_history:
+        gi = h['game_index']
+        dt = h['datetime']
+        if dt.year > 1:  # skip datetime.min
+            if gi not in game_dates:
+                game_dates[gi] = dt
+            game_players[gi].add(h['player_name'])
+
+    if not game_dates:
+        return []
+
+    # Group game indices by calendar date
+    date_games = defaultdict(list)
+    for gi, dt in game_dates.items():
+        date_games[dt.date()].append(gi)
+
+    sorted_dates = sorted(date_games.keys())
+    if not sorted_dates:
+        return []
+
+    # Find clusters of dates within 2-day gaps
+    clusters = []
+    current_cluster = [sorted_dates[0]]
+    for i in range(1, len(sorted_dates)):
+        if (sorted_dates[i] - sorted_dates[i - 1]).days <= 2:
+            current_cluster.append(sorted_dates[i])
+        else:
+            clusters.append(current_cluster)
+            current_cluster = [sorted_dates[i]]
+    clusters.append(current_cluster)
+
+    # Keep clusters where at least one player has min_player_games games
+    lan_events = []
+    for cluster in clusters:
+        all_gis = []
+        for d in cluster:
+            all_gis.extend(date_games[d])
+
+        # Count games per player in this cluster
+        player_counts = defaultdict(int)
+        for gi in all_gis:
+            for name in game_players[gi]:
+                player_counts[name] += 1
+
+        if max(player_counts.values(), default=0) >= min_player_games:
+            lan_events.append({
+                'start_date': cluster[0].isoformat(),
+                'end_date': cluster[-1].isoformat(),
+                'game_index_start': min(all_gis),
+                'game_index_end': max(all_gis),
+                'num_games': len(all_gis),
+                'label': f"LAN {cluster[0].strftime('%d %b %y')}",
+            })
+
+    return lan_events
+
+
+def run_trueskill(parsed_matches=None):
+    """Run TrueSkill calculation.
+
+    Args:
+        parsed_matches: Optional list of (filename, match_obj) tuples from
+            parse_replays_parallel(). If None, parses replays automatically.
+    """
+    logging.info("--- Starting TrueSkill Calculation ---")
+
+    if parsed_matches is None:
+        recorded_games_path = os.path.join(PROJECT_ROOT, config.RECORDED_GAMES_DIR)
+        parsed_matches = parse_replays_parallel(recorded_games_path)
+
+    if not parsed_matches:
+        logging.error("No valid games to process.")
         return
-
-    replay_files_paths = []
-    for root, _, files in os.walk(recorded_games_path):
-        for file in files:
-            if file.endswith(('.aoe2record', '.mgz', '.mgx')):
-                replay_files_paths.append(os.path.join(root, file))
-
-    # Sort files by datetime in filename to process chronologically
-    # GameData._get_datetime_from_filename is used here before GameData objects are created
-    replay_files_paths.sort(key=lambda f: GameData._get_datetime_from_filename(os.path.basename(f)))
 
     ts_params = dict(
         mu=config.TRUESKILL_MU,
@@ -431,17 +560,16 @@ def main():
     game_index_rated = 0
     invalid_games_skipped = 0
 
-    logging.info(f"Found {len(replay_files_paths)} replay files. Processing...")
+    logging.info(f"Processing {len(parsed_matches)} parsed games for TrueSkill...")
 
-    for file_path in replay_files_paths:
-        game_data = GameData.from_replay_file(file_path, config.PLAYER_ALIASES)
+    for filename, match_obj in parsed_matches:
+        game_data = GameData.from_parsed_match(filename, match_obj, config.PLAYER_ALIASES)
 
         if not game_data:
             invalid_games_skipped += 1
             continue
 
         # Update game counts for all participating (aliased) human players
-        # This needs to be done for every player in a parsed game, even if not rated
         for player_obj in game_data.human_players:
             player_rating = calculator.get_or_create_player_rating(player_obj.name)
             player_rating.increment_games_played()
@@ -454,8 +582,9 @@ def main():
         calculator.update_ratings_for_game(game_data, game_index_rated)
 
     reporter.print_final_rankings(calculator.player_ratings, config.MIN_GAMES_FOR_RANKING)
-    reporter.plot_rating_evolution(calculator.rating_history)
-    reporter.save_ratings_to_json(calculator.player_ratings, calculator.rating_history)
+    lan_events = detect_lan_events(calculator.rating_history)
+    reporter.plot_rating_evolution(calculator.rating_history, lan_events=lan_events)
+    reporter.save_ratings_to_json(calculator.player_ratings, calculator.rating_history, lan_events=lan_events)
 
     logging.info("\n--- Skipped Games Summary ---")
     logging.info(f"  Games skipped due to parsing errors, duration, or invalid teams: {invalid_games_skipped}")
@@ -466,6 +595,10 @@ def main():
     logging.info(f"  MIN_GAMES_FOR_RANKING={config.MIN_GAMES_FOR_RANKING}, PLOT_MIN_GAMES={PLOT_MIN_GAMES_THRESHOLD}")
     logging.info("-" * 61)
     logging.info("--- TrueSkill Calculation Complete ---")
+
+
+def main():
+    run_trueskill()
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from datetime import timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -13,6 +14,11 @@ from handicap_recommender import recommended_handicap
 from team_balancer import find_balanced_teams, suggest_rebalances_data
 
 RATINGS_PATH = os.path.join(PROJECT_ROOT, "player_ratings.json")
+ANALYSIS_DATA_PATH = os.path.join(PROJECT_ROOT, "analysis_data.json")
+RATING_HISTORY_PATH = os.path.join(PROJECT_ROOT, "rating_history.json")
+
+# Module-level cache for analysis data (loaded once)
+_analysis_cache = None
 
 
 def _get_ts_env() -> trueskill.TrueSkill:
@@ -38,6 +44,7 @@ def _player_info(data: Dict[str, Any]) -> Dict[str, Any]:
         "mu_scaled": round(data["mu_scaled"], 1),
         "sigma_scaled": round(data["sigma_scaled"], 2),
         "games_played": data["games_played"],
+        "games_rated": data.get("games_rated", data["games_played"]),
         "confidence_percent": round(data["confidence_percent"], 1),
         "avg_handicap_last_30": avg_hc,
         "recommended_hc": recommended_handicap(data["mu_scaled"], avg_hc),
@@ -48,12 +55,12 @@ def _player_info(data: Dict[str, Any]) -> Dict[str, Any]:
 def get_players_for_api() -> Dict[str, Any]:
     ratings = load_ratings()
     ranked = sorted(
-        [r for r in ratings if r["games_played"] >= config.MIN_GAMES_FOR_RANKING],
+        [r for r in ratings if r.get("games_rated", r["games_played"]) >= config.MIN_GAMES_FOR_RANKING],
         key=lambda r: r["mu_scaled"],
         reverse=True,
     )
     provisional = sorted(
-        [r for r in ratings if r["games_played"] < config.MIN_GAMES_FOR_RANKING],
+        [r for r in ratings if r.get("games_rated", r["games_played"]) < config.MIN_GAMES_FOR_RANKING],
         key=lambda r: r["mu_scaled"],
         reverse=True,
     )
@@ -187,3 +194,109 @@ def rebalance_teams(
         team1, team2, weaker_team,
         player_ts_ratings, ratings_data, ts_env, top_n=top_n,
     )
+
+
+# --- New API service functions ---
+
+def _load_analysis_data() -> Dict[str, Any]:
+    global _analysis_cache
+    if _analysis_cache is None:
+        with open(ANALYSIS_DATA_PATH, "r") as f:
+            _analysis_cache = json.load(f)
+    return _analysis_cache
+
+
+def get_awards_for_api() -> Dict[str, Any]:
+    data = _load_analysis_data()
+    return data["awards"]
+
+
+def get_games_for_api() -> Dict[str, Any]:
+    data = _load_analysis_data()
+    games = data["game_results"]
+    formatted = []
+    for g in games:
+        winning_team_id = g.get("winning_team_id")
+        teams_list = []
+        for tid, players in g["teams"].items():
+            teams_list.append({
+                "team_id": tid,
+                "players": players,
+                "is_winner": (tid == winning_team_id),
+            })
+        formatted.append({
+            "filename": g["filename"],
+            "datetime": g["datetime"],
+            "duration_seconds": g["duration_seconds"],
+            "duration_display": str(timedelta(seconds=int(g["duration_seconds"]))),
+            "teams": teams_list,
+            "has_winner": winning_team_id is not None,
+        })
+    formatted.sort(key=lambda g: g["datetime"], reverse=True)
+    return {"games": formatted, "total": len(formatted)}
+
+
+def get_stats_for_api() -> Dict[str, Any]:
+    data = _load_analysis_data()
+    return data["general_stats"]
+
+
+def get_player_profile_for_api(name: str) -> Optional[Dict[str, Any]]:
+    data = _load_analysis_data()
+    profiles = data.get("player_profiles", {})
+
+    # Try exact match, then case-insensitive
+    profile = profiles.get(name)
+    if profile is None:
+        for pname, pdata in profiles.items():
+            if pname.lower() == name.lower():
+                profile = pdata
+                break
+
+    if profile is None:
+        return None
+
+    # Make a copy to avoid mutating the cache
+    profile = dict(profile)
+
+    # Enrich with rating data from player_ratings.json
+    try:
+        ratings_data = _ratings_dict()
+        canonical_name = profile["name"]
+        if canonical_name in ratings_data:
+            rd = ratings_data[canonical_name]
+            avg_hc = rd.get("avg_handicap_last_30", 100)
+            profile["rating"] = {
+                "mu_scaled": round(rd["mu_scaled"], 1),
+                "sigma_scaled": round(rd["sigma_scaled"], 2),
+                "confidence_percent": round(rd["confidence_percent"], 1),
+                "avg_handicap_last_30": avg_hc,
+                "recommended_hc": recommended_handicap(rd["mu_scaled"], avg_hc),
+            }
+    except FileNotFoundError:
+        pass
+
+    # Compute trend from rating history
+    try:
+        history_data = get_rating_history_for_api()
+        player_history = [h for h in history_data["history"] if h["player_name"] == profile["name"]]
+        if len(player_history) >= 2:
+            latest = player_history[-1]["mu"]
+            earlier_idx = max(0, len(player_history) - 6)
+            earlier = player_history[earlier_idx]["mu"]
+            profile["trend"] = round(latest - earlier, 1)
+        else:
+            profile["trend"] = 0
+    except FileNotFoundError:
+        profile["trend"] = 0
+
+    return profile
+
+
+def get_rating_history_for_api() -> Dict[str, Any]:
+    with open(RATING_HISTORY_PATH, "r") as f:
+        data = json.load(f)
+    # Support both old format (flat list) and new format (dict with history + lan_events)
+    if isinstance(data, list):
+        return {"history": data, "lan_events": []}
+    return data
