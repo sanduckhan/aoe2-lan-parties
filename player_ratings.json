@@ -1,0 +1,145 @@
+[
+  {
+    "name": "LiKiD",
+    "mu_scaled": 1357.61,
+    "sigma_scaled": 57.96,
+    "mu_unscaled": 33.9403,
+    "sigma_unscaled": 1.4491,
+    "games_played": 264,
+    "games_rated": 238,
+    "confidence_percent": 82.6,
+    "avg_handicap_last_30": 100.0
+  },
+  {
+    "name": "Boivinos",
+    "mu_scaled": 1344.22,
+    "sigma_scaled": 62.21,
+    "mu_unscaled": 33.6056,
+    "sigma_unscaled": 1.5552,
+    "games_played": 119,
+    "games_rated": 109,
+    "confidence_percent": 81.3,
+    "avg_handicap_last_30": 100.0
+  },
+  {
+    "name": "Sanduck",
+    "mu_scaled": 1087.22,
+    "sigma_scaled": 57.74,
+    "mu_unscaled": 27.1806,
+    "sigma_unscaled": 1.4434,
+    "games_played": 264,
+    "games_rated": 238,
+    "confidence_percent": 82.7,
+    "avg_handicap_last_30": 100.0
+  },
+  {
+    "name": "Tfirda",
+    "mu_scaled": 1031.45,
+    "sigma_scaled": 196.17,
+    "mu_unscaled": 25.7862,
+    "sigma_unscaled": 4.9043,
+    "games_played": 18,
+    "games_rated": 16,
+    "confidence_percent": 41.1,
+    "avg_handicap_last_30": 100.0
+  },
+  {
+    "name": "youri basmati",
+    "mu_scaled": 924.19,
+    "sigma_scaled": 59.23,
+    "mu_unscaled": 23.1046,
+    "sigma_unscaled": 1.4807,
+    "games_played": 226,
+    "games_rated": 204,
+    "confidence_percent": 82.2,
+    "avg_handicap_last_30": 100.3
+  },
+  {
+    "name": "Bedev",
+    "mu_scaled": 904.14,
+    "sigma_scaled": 60.99,
+    "mu_unscaled": 22.6036,
+    "sigma_unscaled": 1.5247,
+    "games_played": 159,
+    "games_rated": 144,
+    "confidence_percent": 81.7,
+    "avg_handicap_last_30": 100.0
+  },
+  {
+    "name": "Bigfouine007",
+    "mu_scaled": 871.92,
+    "sigma_scaled": 135.14,
+    "mu_unscaled": 21.7979,
+    "sigma_unscaled": 3.3785,
+    "games_played": 30,
+    "games_rated": 26,
+    "confidence_percent": 59.5,
+    "avg_handicap_last_30": 114.4
+  },
+  {
+    "name": "Djokolonel",
+    "mu_scaled": 859.25,
+    "sigma_scaled": 176.8,
+    "mu_unscaled": 21.4814,
+    "sigma_unscaled": 4.42,
+    "games_played": 23,
+    "games_rated": 21,
+    "confidence_percent": 47.0,
+    "avg_handicap_last_30": 100.0
+  },
+  {
+    "name": "Coton Ouat\u00e9",
+    "mu_scaled": 789.69,
+    "sigma_scaled": 73.21,
+    "mu_unscaled": 19.7422,
+    "sigma_unscaled": 1.8302,
+    "games_played": 127,
+    "games_rated": 110,
+    "confidence_percent": 78.0,
+    "avg_handicap_last_30": 108.2
+  },
+  {
+    "name": "Fatmonkey",
+    "mu_scaled": 788.84,
+    "sigma_scaled": 74.56,
+    "mu_unscaled": 19.721,
+    "sigma_unscaled": 1.864,
+    "games_played": 74,
+    "games_rated": 66,
+    "confidence_percent": 77.6,
+    "avg_handicap_last_30": 102.0
+  },
+  {
+    "name": "cornichonmasquez",
+    "mu_scaled": 783.68,
+    "sigma_scaled": 90.36,
+    "mu_unscaled": 19.592,
+    "sigma_unscaled": 2.259,
+    "games_played": 59,
+    "games_rated": 51,
+    "confidence_percent": 72.9,
+    "avg_handicap_last_30": 115.2
+  },
+  {
+    "name": "vodkite49",
+    "mu_scaled": 581.44,
+    "sigma_scaled": 104.34,
+    "mu_unscaled": 14.5359,
+    "sigma_unscaled": 2.6084,
+    "games_played": 59,
+    "games_rated": 55,
+    "confidence_percent": 68.7,
+    "avg_handicap_last_30": 103.7
+  },
+  {
+    "name": "Jolly Roger",
+    "mu_scaled": 482.74,
+    "sigma_scaled": 69.7,
+    "mu_unscaled": 12.0685,
+    "sigma_unscaled": 1.7424,
+    "games_played": 129,
+    "games_rated": 118,
+    "confidence_percent": 79.1,
+    "avg_handicap_last_30": 110.7
+  }
+]

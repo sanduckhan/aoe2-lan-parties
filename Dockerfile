@@ -9,6 +9,6 @@ COPY analyzer_lib/config.py analyzer_lib/
 COPY scripts/team_balancer.py scripts/
 COPY scripts/handicap_recommender.py scripts/
 COPY web/ web/
-COPY run_web.py player_ratings.json ./
+COPY run_web.py player_ratings.json analysis_data.json rating_history.json ./
 
 CMD gunicorn --bind 0.0.0.0:$PORT web.app:app
