@@ -70,6 +70,7 @@ class GameRegistry:
     def __init__(self, data_dir=None):
         self._lock = threading.Lock()
         self._data_dir = data_dir or config.DATA_DIR
+        os.makedirs(self._data_dir, exist_ok=True)
         self._path = os.path.join(self._data_dir, "game_registry.json")
         self._data = {"games": [], "total_processed": 0, "last_updated": ""}
         self._sha256_set = set()
