@@ -1725,6 +1725,24 @@ button:hover {
     text-align: right;
 }
 
+.btn-chronicle-redeploy {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 0.2rem 0.45rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: all 0.2s ease;
+    margin-right: 0.5rem;
+}
+
+.btn-chronicle-redeploy:hover {
+    color: var(--gold);
+    border-color: var(--gold-dim);
+    background: rgba(201, 168, 76, 0.08);
+}
+
 .streak-badge {
     font-family: var(--font-display);
     font-size: 0.6rem;

@@ -550,10 +550,14 @@ function renderGameHistory(games) {
         return;
     }
 
+    window._chronicleGames = {};
+
     container.innerHTML = games.map((g, i) => {
         const winTeam = g.teams.find(t => t.is_winner);
         const loseTeam = g.teams.find(t => !t.is_winner);
         if (!winTeam || !loseTeam) return '';
+
+        window._chronicleGames[i] = g;
 
         const formatPlayers = (players, streaks) => players.map(p => {
             const badge = streaks && streaks[p.name]
@@ -563,6 +567,10 @@ function renderGameHistory(games) {
         }).join(', ');
 
         const dateStr = g.datetime !== '0001-01-01T00:00:00' ? new Date(g.datetime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : '?';
+
+        const redeployBtn = g.has_winner
+            ? `<button class="btn-chronicle-redeploy" onclick="redeployFromChronicle(${i})" title="Redeploy these teams">&#9876;</button>`
+            : '';
 
         return `
         <div class="history-entry" style="animation-delay: ${Math.min(i * 0.02, 0.5)}s">
@@ -579,10 +587,48 @@ function renderGameHistory(games) {
                 </div>
             </div>
             <div class="history-meta">
+                ${redeployBtn}
                 <span class="history-duration">${g.duration_display}</span>
             </div>
         </div>`;
     }).join('');
+}
+
+function redeployFromChronicle(gameIdx) {
+    const g = window._chronicleGames[gameIdx];
+    if (!g) return;
+
+    const ratingsMap = {};
+    state.allPlayers.forEach(p => {
+        ratingsMap[p.name] = {
+            rating: p.mu_scaled,
+            recommended_hc: p.recommended_hc,
+            games_played: p.games_played,
+        };
+    });
+
+    const winTeam = g.teams.find(t => t.is_winner);
+    const loseTeam = g.teams.find(t => !t.is_winner);
+    if (!winTeam || !loseTeam) return;
+
+    const buildTeam = (team) => team.players.map(p => {
+        const known = ratingsMap[p.name];
+        return {
+            name: p.name,
+            rating: known ? known.rating : 0,
+            recommended_hc: known ? known.recommended_hc : 100,
+            games_played: known ? known.games_played : 0,
+        };
+    });
+
+    useSetup({
+        team1: buildTeam(winTeam),
+        team2: buildTeam(loseTeam),
+        benched: [],
+        rating_changes: {},
+        match_quality: null,
+        expected_winner: null,
+    });
 }
 
 // History filter
