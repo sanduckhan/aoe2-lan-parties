@@ -126,6 +126,17 @@ def api_games():
         return jsonify({"error": "analysis_data.json not found. Run main.py first."}), 404
 
 
+@app.route("/api/games/<sha256>/detail")
+def api_game_detail(sha256):
+    try:
+        detail = services.get_game_detail_for_api(sha256)
+        if detail is None:
+            return jsonify({"error": "Game not found"}), 404
+        return jsonify(detail)
+    except FileNotFoundError:
+        return jsonify({"error": "game_registry.json not found"}), 404
+
+
 @app.route("/api/games/<sha256>/download")
 def api_game_download(sha256):
     result = services.get_replay_download(sha256)

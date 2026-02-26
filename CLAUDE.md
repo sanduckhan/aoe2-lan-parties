@@ -34,9 +34,6 @@ poetry run python scripts/display_game_results.py
 # Parse a single replay to JSON
 poetry run python scripts/parse_single_game.py path/to/file.aoe2record
 
-# Batch export all replays to JSON
-poetry run python scripts/parse.py
-
 # Migrate existing replays to game registry (one-time bootstrap)
 poetry run python -m server.migrate
 poetry run python -m server.migrate --skip-bucket

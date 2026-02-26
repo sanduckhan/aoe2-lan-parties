@@ -509,6 +509,9 @@ function renderAwards(data) {
 // GAME HISTORY TAB
 // =====================
 let allGames = [];
+let historySortOrder = 'desc';
+let expandedGameSha = null;
+const gameDetailCache = {};
 
 async function fetchGameHistory() {
     try {
@@ -519,11 +522,8 @@ async function fetchGameHistory() {
                 `<div class="loading-text">${data.error}</div>`;
             return;
         }
-        allGames = data.games || [];
-        // Compute streaks in chronological order, then reverse back to newest-first
-        const chronological = [...allGames].reverse();
-        const withStreaks = computeStreaks(chronological).reverse();
-        renderGameHistory(withStreaks);
+        allGames = data.games || []; // Server returns ASC (oldest first)
+        applyHistoryView();
         document.getElementById('history-loading').style.display = 'none';
         document.getElementById('history-content').style.display = '';
     } catch (err) {
@@ -533,11 +533,30 @@ async function fetchGameHistory() {
     }
 }
 
+function applyHistoryView() {
+    const q = (document.getElementById('history-filter')?.value || '').toLowerCase();
+    let games = [...allGames];
+    if (q) {
+        games = games.filter(g =>
+            g.teams.some(t => t.players.some(p => p.name.toLowerCase().includes(q)))
+        );
+    }
+    const withStreaks = computeStreaks(games);
+    if (historySortOrder === 'desc') withStreaks.reverse();
+    renderGameHistory(withStreaks);
+}
+
+function toggleSortOrder() {
+    historySortOrder = historySortOrder === 'asc' ? 'desc' : 'asc';
+    const btn = document.getElementById('sort-toggle-btn');
+    if (btn) btn.textContent = historySortOrder === 'asc' ? 'Newest First' : 'Oldest First';
+    applyHistoryView();
+}
+
 function computeStreaks(games) {
     const streaks = {};
     return games.map(g => {
         const streakInfo = {};
-        // Skip games with no winner — they have no outcome to streak on
         if (!g.has_winner) return { ...g, streaks: streakInfo };
         g.teams.forEach(team => {
             team.players.forEach(p => {
@@ -568,9 +587,10 @@ function renderGameHistory(games) {
         const loseTeam = g.teams.find(t => !t.is_winner);
         if (!winTeam || !loseTeam) return '';
 
-        window._chronicleGames[i] = g;
+        const sha = g.sha256 || '';
+        window._chronicleGames[sha || i] = g;
 
-        const formatPlayers = (players, streaks, ratingChanges) => players.map(p => {
+        const formatPlayer = (p, streaks, ratingChanges) => {
             const badge = streaks && streaks[p.name]
                 ? `<span class="streak-badge ${streaks[p.name][0] === 'W' ? 'win-streak' : 'loss-streak'}">${streaks[p.name]}</span>`
                 : '';
@@ -579,46 +599,201 @@ function renderGameHistory(games) {
                 const delta = ratingChanges[p.name];
                 const sign = delta >= 0 ? '+' : '';
                 const cls = delta >= 0 ? 'rating-up' : 'rating-down';
-                ratingBadge = `<span class="rating-delta ${cls}">${sign}${delta}</span>`;
+                ratingBadge = `<span class="rating-delta ${cls}">${sign}${Math.round(delta)}</span>`;
             }
-            return `<a class="player-link" onclick="openPlayerProfile('${p.name}')">${p.name}</a>${ratingBadge}${badge}`;
-        }).join(', ');
+            return `<span class="gc-player-chip">
+                <a class="player-link" onclick="event.stopPropagation(); openPlayerProfile('${p.name}')">${p.name}</a>${ratingBadge}${badge}
+                <span class="gc-civ">${p.civilization || ''}</span>
+            </span>`;
+        };
 
-        const dateStr = g.datetime !== '0001-01-01T00:00:00' ? new Date(g.datetime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : '?';
+        const dateObj = g.datetime && g.datetime !== '0001-01-01T00:00:00' ? new Date(g.datetime) : null;
+        const dateStr = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : '?';
 
-        const redeployBtn = g.has_winner
-            ? `<button class="btn-chronicle-redeploy" onclick="redeployFromChronicle(${i})" title="Redeploy these teams">Redeploy</button>`
-            : '';
-
-        const downloadBtn = g.sha256
-            ? `<a class="btn-chronicle-download" href="/api/games/${g.sha256}/download" title="Download replay">\u2B73</a>`
-            : '';
+        const gameNum = g.game_number || '';
+        const isExpanded = expandedGameSha === sha;
 
         return `
-        <div class="history-entry" style="animation-delay: ${Math.min(i * 0.02, 0.5)}s">
-            <div class="history-date">${dateStr}</div>
-            <div class="history-teams">
-                <div class="history-team history-winner">
-                    <span class="history-team-label">Victory</span>
-                    <span class="history-players">${formatPlayers(winTeam.players, g.streaks, g.rating_changes)}</span>
+        <div class="gc-entry${isExpanded ? ' gc-expanded' : ''}" data-sha="${sha}">
+            <div class="gc-header" onclick="toggleGameDetail('${sha}')">
+                <div class="gc-left">
+                    <span class="gc-number">#${gameNum}</span>
+                    <span class="gc-date">${dateStr}</span>
+                    <span class="gc-duration">${g.duration_display}</span>
                 </div>
-                <span class="history-vs">\u2694</span>
-                <div class="history-team history-loser">
-                    <span class="history-team-label">Defeat</span>
-                    <span class="history-players">${formatPlayers(loseTeam.players, g.streaks, g.rating_changes)}</span>
+                <div class="gc-expand-icon">\u25BE</div>
+            </div>
+            <div class="gc-matchup" onclick="toggleGameDetail('${sha}')">
+                <div class="gc-side gc-winner-side">
+                    <div class="gc-side-label gc-victory-label">Victory</div>
+                    <div class="gc-players">
+                        ${winTeam.players.map(p => formatPlayer(p, g.streaks, g.rating_changes)).join('')}
+                    </div>
+                </div>
+                <div class="gc-vs-divider"><span>vs</span></div>
+                <div class="gc-side gc-loser-side">
+                    <div class="gc-side-label gc-defeat-label">Defeat</div>
+                    <div class="gc-players">
+                        ${loseTeam.players.map(p => formatPlayer(p, g.streaks, g.rating_changes)).join('')}
+                    </div>
                 </div>
             </div>
-            <div class="history-meta">
-                ${redeployBtn}
-                ${downloadBtn}
-                <span class="history-duration">${g.duration_display}</span>
+            <div class="gc-actions-bar">
+                ${g.has_winner ? `<button class="gc-action-btn gc-action-redeploy" onclick="event.stopPropagation(); redeployFromChronicle('${sha}')">\u2694 Redeploy</button>` : ''}
+                ${sha ? `<a class="gc-action-btn gc-action-download" href="/api/games/${sha}/download" onclick="event.stopPropagation()">\u2193 Download</a>` : ''}
+            </div>
+            <div class="gc-detail" id="detail-${sha}" style="display:${isExpanded ? 'block' : 'none'}">
+                <div class="gc-detail-loading">Loading battle details...</div>
             </div>
         </div>`;
     }).join('');
+
+    if (expandedGameSha && gameDetailCache[expandedGameSha]) {
+        renderGameDetail(expandedGameSha, gameDetailCache[expandedGameSha]);
+    }
 }
 
-function redeployFromChronicle(gameIdx) {
-    const g = window._chronicleGames[gameIdx];
+async function toggleGameDetail(sha256) {
+    if (!sha256) return;
+
+    const detailEl = document.getElementById(`detail-${sha256}`);
+    const entryEl = detailEl?.closest('.gc-entry');
+    if (!detailEl || !entryEl) return;
+
+    if (detailEl.style.display !== 'none') {
+        detailEl.style.display = 'none';
+        entryEl.classList.remove('gc-expanded');
+        expandedGameSha = null;
+        return;
+    }
+
+    // Collapse any other expanded game
+    if (expandedGameSha && expandedGameSha !== sha256) {
+        const prev = document.getElementById(`detail-${expandedGameSha}`);
+        if (prev) {
+            prev.style.display = 'none';
+            prev.closest('.gc-entry')?.classList.remove('gc-expanded');
+        }
+    }
+
+    detailEl.style.display = 'block';
+    entryEl.classList.add('gc-expanded');
+    expandedGameSha = sha256;
+
+    if (gameDetailCache[sha256]) {
+        renderGameDetail(sha256, gameDetailCache[sha256]);
+    } else {
+        detailEl.innerHTML = '<div class="gc-detail-loading">Loading battle details...</div>';
+        try {
+            const res = await fetch(`/api/games/${sha256}/detail`);
+            const data = await res.json();
+            if (data.error) {
+                detailEl.innerHTML = `<div class="gc-detail-error">${data.error}</div>`;
+                return;
+            }
+            gameDetailCache[sha256] = data;
+            renderGameDetail(sha256, data);
+        } catch (err) {
+            detailEl.innerHTML = '<div class="gc-detail-error">Failed to load details.</div>';
+            console.error(err);
+        }
+    }
+}
+
+function renderGameDetail(sha256, data) {
+    const detailEl = document.getElementById(`detail-${sha256}`);
+    if (!detailEl) return;
+
+    const teams = data.teams || {};
+    const playerDeltas = data.player_deltas || {};
+    const gameDeltas = data.game_level_deltas || {};
+    const ratingChanges = data.rating_changes || {};
+
+    const renderPlayerCard = (p) => {
+        const deltas = playerDeltas[p.name] || {};
+        const rc = ratingChanges[p.name];
+        const rcStr = rc != null
+            ? `<span class="gd-rating ${rc >= 0 ? 'rating-up' : 'rating-down'}">${rc >= 0 ? '+' : ''}${Math.round(rc)}</span>`
+            : '';
+
+        const units = deltas.units_created || {};
+        const topUnits = Object.entries(units)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5);
+
+        const techs = Object.keys(deltas.crucial_researched || {});
+        const hcDisplay = p.handicap && p.handicap !== 100 ? `${p.handicap}%` : '100%';
+
+        const statsRow = [
+            { label: 'HC', value: hcDisplay },
+            { label: 'eAPM', value: p.eapm != null ? Math.round(p.eapm) : '-' },
+            { label: 'Units', value: deltas.total_units_created || 0 },
+            { label: 'Market', value: deltas.market_transactions || 0 },
+            { label: 'Walls', value: deltas.wall_segments_built || 0 },
+            { label: 'Razed', value: deltas.buildings_deleted || 0 },
+        ];
+
+        return `
+        <div class="gd-player-card ${p.winner ? 'gd-card-winner' : 'gd-card-loser'}">
+            <div class="gd-card-top">
+                <div class="gd-card-identity">
+                    <span class="gd-card-name">
+                        <a class="player-link" onclick="openPlayerProfile('${p.name}')">${p.name}</a>
+                        ${rcStr}
+                    </span>
+                    <span class="gd-card-civ">${p.civilization}</span>
+                </div>
+            </div>
+            <div class="gd-card-stats">
+                ${statsRow.map(s => `<div class="gd-card-stat"><span class="gd-card-stat-val">${s.value}</span><span class="gd-card-stat-key">${s.label}</span></div>`).join('')}
+            </div>
+            ${topUnits.length > 0 ? `
+            <div class="gd-card-section">
+                <div class="gd-card-section-title">Army Composition</div>
+                <div class="gd-army-list">
+                    ${topUnits.map(([name, count]) => `<div class="gd-army-row"><span class="gd-army-name">${name}</span><span class="gd-army-count">${count}</span></div>`).join('')}
+                </div>
+            </div>` : ''}
+            ${techs.length > 0 ? `
+            <div class="gd-card-section">
+                <div class="gd-card-section-title">Upgrades Researched</div>
+                <div class="gd-tech-list">${techs.map(t => `<span class="gd-tech-tag">${t}</span>`).join('')}</div>
+            </div>` : ''}
+        </div>`;
+    };
+
+    const teamEntries = Object.values(teams);
+    const winTeam = teamEntries.find(t => t.is_winner);
+    const loseTeam = teamEntries.find(t => !t.is_winner);
+    const totalUnits = gameDeltas.total_units_created_overall || 0;
+
+    detailEl.innerHTML = `
+        <div class="gd-panel">
+            <div class="gd-battle-grid">
+                <div class="gd-battle-side">
+                    <div class="gd-side-header gd-side-victory">Victory</div>
+                    ${winTeam ? winTeam.players.map(p => renderPlayerCard(p)).join('') : ''}
+                </div>
+                <div class="gd-battle-side">
+                    <div class="gd-side-header gd-side-defeat">Defeat</div>
+                    ${loseTeam ? loseTeam.players.map(p => renderPlayerCard(p)).join('') : ''}
+                </div>
+            </div>
+            <div class="gd-footer">
+                <div class="gd-footer-stats">
+                    <span><b>${totalUnits}</b> units created</span>
+                    <span>Duration <b>${data.duration_display}</b></span>
+                </div>
+                <div class="gd-footer-actions">
+                    ${sha256 ? `<a class="gc-action-btn gc-action-download" href="/api/games/${sha256}/download">\u2193 Download Replay</a>` : ''}
+                    ${winTeam ? `<button class="gc-action-btn gc-action-redeploy" onclick="redeployFromChronicle('${sha256}')">\u2694 Redeploy Teams</button>` : ''}
+                </div>
+            </div>
+        </div>`;
+}
+
+function redeployFromChronicle(sha256Key) {
+    const g = window._chronicleGames[sha256Key];
     if (!g) return;
 
     const ratingsMap = {};
@@ -658,13 +833,7 @@ function redeployFromChronicle(gameIdx) {
 document.addEventListener('DOMContentLoaded', () => {
     const filterInput = document.getElementById('history-filter');
     if (filterInput) {
-        filterInput.addEventListener('input', (e) => {
-            const q = e.target.value.toLowerCase();
-            const matching = [...allGames].reverse().filter(g =>
-                g.teams.some(t => t.players.some(p => p.name.toLowerCase().includes(q)))
-            );
-            renderGameHistory(computeStreaks(matching).reverse());
-        });
+        filterInput.addEventListener('input', () => applyHistoryView());
     }
 });
 

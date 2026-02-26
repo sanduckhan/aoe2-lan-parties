@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import sys
-from collections import defaultdict
 from datetime import timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -272,8 +271,67 @@ def get_games_for_api() -> Dict[str, Any]:
             "sha256": g.get("sha256"),
             "rating_changes": g.get("rating_changes"),
         })
-    formatted.sort(key=lambda g: g["datetime"], reverse=True)
+    formatted.sort(key=lambda g: g["datetime"])
+    for i, g in enumerate(formatted, 1):
+        g["game_number"] = i
     return {"games": formatted, "total": len(formatted)}
+
+
+def get_game_detail_for_api(sha256: str) -> Optional[Dict[str, Any]]:
+    """Return full game detail from registry + rating changes from analysis data."""
+    registry_data = _game_registry_cache.get()
+    if registry_data is None:
+        raise FileNotFoundError(f"Game registry not found: {GAME_REGISTRY_PATH}")
+
+    entry = None
+    for g in registry_data.get("games", []):
+        if g.get("sha256") == sha256:
+            entry = g
+            break
+
+    if entry is None:
+        return None
+
+    result = {
+        "sha256": entry.get("sha256"),
+        "filename": entry.get("filename"),
+        "datetime": entry.get("datetime"),
+        "duration_seconds": entry.get("duration_seconds", 0),
+        "duration_display": str(timedelta(seconds=int(entry.get("duration_seconds", 0)))),
+        "status": entry.get("status"),
+        "winning_team_id": entry.get("winning_team_id"),
+        "teams": {},
+        "player_deltas": entry.get("player_deltas", {}),
+        "game_level_deltas": entry.get("game_level_deltas", {}),
+        "rating_changes": {},
+    }
+
+    for tid, players in entry.get("teams", {}).items():
+        result["teams"][tid] = {
+            "team_id": tid,
+            "is_winner": (tid == str(entry.get("winning_team_id"))),
+            "players": [
+                {
+                    "name": p["name"],
+                    "civilization": p.get("civ", "Unknown"),
+                    "winner": p.get("winner", False),
+                    "handicap": p.get("handicap", 100),
+                    "eapm": p.get("eapm"),
+                }
+                for p in players
+            ],
+        }
+
+    try:
+        analysis_data = _load_analysis_data()
+        for gr in analysis_data.get("game_results", []):
+            if gr.get("sha256") == sha256:
+                result["rating_changes"] = gr.get("rating_changes", {})
+                break
+    except FileNotFoundError:
+        pass
+
+    return result
 
 
 def get_stats_for_api() -> Dict[str, Any]:
