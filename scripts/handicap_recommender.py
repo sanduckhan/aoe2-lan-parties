@@ -8,7 +8,7 @@ sys.path.append(PROJECT_ROOT)
 from analyzer_lib import config, db
 
 FLOOR_RATING = 700  # Target: no one should play below this effective rating
-ELO_PER_STEP = 300  # 300 rating deficit = 5% handicap
+ELO_PER_STEP = 200  # 200 rating deficit = 5% handicap
 HC_STEP = 5
 
 
@@ -17,12 +17,9 @@ def round_to_nearest_5(value):
 
 
 def recommended_handicap(rating, current_avg_hc):
-    deficit = max(0, FLOOR_RATING - rating)
-    if deficit == 0:
-        return round_to_nearest_5(current_avg_hc)
-    increments = deficit / ELO_PER_STEP
-    bump = round(increments) * HC_STEP
-    return min(200, max(100, round_to_nearest_5(current_avg_hc + bump)))
+    gap = FLOOR_RATING - rating
+    adjustment = (gap / ELO_PER_STEP) * HC_STEP
+    return min(200, max(100, round_to_nearest_5(current_avg_hc + adjustment)))
 
 
 def print_table(players, label=None):
