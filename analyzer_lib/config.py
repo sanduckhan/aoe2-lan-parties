@@ -1,5 +1,13 @@
 # Configuration file for AoE2 LAN Party Analyzer
 
+import os
+
+# Base directory for all JSON data files (game_registry.json, player_ratings.json, etc.)
+DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# API key for upload/rebuild endpoints (set via environment variable)
+API_KEY = os.environ.get("API_KEY", "")
+
 # Directory where recorded game files (.aoe2record, .mgz, .mgx) are stored.
 RECORDED_GAMES_DIR = 'recorded_games'
 

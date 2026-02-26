@@ -53,6 +53,15 @@ class PlayerRating:
             return 100.0 if self.rating.sigma == 0 else 0.0
         return max(0.0, (1.0 - self.rating.sigma / initial_unscaled_sigma)) * 100.0
 
+class _PlayerStub:
+    """Lightweight player stub for constructing GameData from registry entries."""
+    def __init__(self, name: str, team_id: int, winner: bool, handicap: int = 100):
+        self.name = name
+        self.team_id = team_id
+        self.winner = winner
+        self.handicap = handicap
+
+
 class GameData:
     """Parses and stores relevant information about a single game."""
     def __init__(self, filename: str, datetime_obj: datetime, 
@@ -157,6 +166,51 @@ class GameData:
 
         except Exception as e:
             logging.warning(f"Skipping game {filename}: {e}")
+            return None
+
+    @classmethod
+    def from_registry_entry(cls, entry: Dict[str, Any]) -> Optional['GameData']:
+        """Create a lightweight GameData from a game registry entry.
+
+        Constructs stub player objects with the attributes needed by
+        TrueSkillCalculator.update_ratings_for_game() (name, team_id,
+        winner, handicap) without parsing a replay file.
+        """
+        try:
+            dt_str = entry.get("datetime", "")
+            try:
+                datetime_obj = datetime.fromisoformat(dt_str)
+            except (ValueError, TypeError):
+                datetime_obj = datetime.min
+
+            teams_data = {}
+            all_players = []
+            for team_id_str, players_list in entry.get("teams", {}).items():
+                team_id = int(team_id_str)
+                team_players = []
+                for p_info in players_list:
+                    stub = _PlayerStub(
+                        name=p_info["name"],
+                        team_id=team_id,
+                        winner=p_info.get("winner", False),
+                        handicap=p_info.get("handicap", 100),
+                    )
+                    team_players.append(stub)
+                    all_players.append(stub)
+                teams_data[team_id] = team_players
+
+            winning_team_id_raw = entry.get("winning_team_id")
+            winning_team_id = int(winning_team_id_raw) if winning_team_id_raw is not None else None
+
+            return cls(
+                filename=entry.get("filename", ""),
+                datetime_obj=datetime_obj,
+                human_players=all_players,
+                teams_data=teams_data,
+                winning_team_id=winning_team_id,
+            )
+        except Exception as e:
+            logging.warning(f"Failed to create GameData from registry entry: {e}")
             return None
 
     def get_player_handicaps(self) -> Dict[str, int]:
@@ -595,6 +649,115 @@ def run_trueskill(parsed_matches=None):
     logging.info(f"  MIN_GAMES_FOR_RANKING={config.MIN_GAMES_FOR_RANKING}, PLOT_MIN_GAMES={PLOT_MIN_GAMES_THRESHOLD}")
     logging.info("-" * 61)
     logging.info("--- TrueSkill Calculation Complete ---")
+
+
+def run_trueskill_from_registry(registry_games, data_dir=None):
+    """Rebuild TrueSkill ratings from game registry entries.
+
+    Takes a list of game entries (only those with status "processed"),
+    constructs lightweight GameData objects from registry metadata,
+    sorts chronologically, processes through TrueSkillCalculator, and
+    saves player_ratings.json and rating_history.json.
+
+    Args:
+        registry_games: List of game dicts from the registry (status="processed").
+        data_dir: Optional base directory for output files. Defaults to PROJECT_ROOT.
+
+    Returns:
+        (player_ratings_map, rating_history, lan_events) tuple.
+    """
+    output_dir = data_dir or PROJECT_ROOT
+
+    ts_params = dict(
+        mu=config.TRUESKILL_MU,
+        sigma=config.TRUESKILL_SIGMA,
+        beta=config.TRUESKILL_BETA,
+        tau=config.TRUESKILL_TAU,
+        draw_probability=config.TRUESKILL_DRAW_PROBABILITY,
+    )
+    calculator = TrueSkillCalculator(**ts_params)
+    reporter = ReportGenerator(
+        elo_scaling_factor=config.TRUESKILL_ELO_SCALING_FACTOR,
+        initial_unscaled_sigma=config.TRUESKILL_SIGMA,
+        plot_min_games=PLOT_MIN_GAMES_THRESHOLD,
+    )
+
+    # Sort games chronologically
+    sorted_games = sorted(registry_games, key=lambda g: g.get("datetime", ""))
+
+    game_index_rated = 0
+
+    for entry in sorted_games:
+        game_data = GameData.from_registry_entry(entry)
+        if not game_data:
+            continue
+
+        # Increment games_played for all participants
+        for player_obj in game_data.human_players:
+            player_rating = calculator.get_or_create_player_rating(player_obj.name)
+            player_rating.increment_games_played()
+
+        if not game_data.is_valid_for_rating():
+            continue
+
+        game_index_rated += 1
+        calculator.update_ratings_for_game(game_data, game_index_rated)
+
+    lan_events = detect_lan_events(calculator.rating_history)
+
+    # Save to data_dir instead of PROJECT_ROOT
+    ratings_path = os.path.join(output_dir, "player_ratings.json")
+    history_path = os.path.join(output_dir, "rating_history.json")
+
+    # Build ratings list
+    ratings_list = []
+    for player_name, player_rating_obj in calculator.player_ratings.items():
+        player_history = [h for h in calculator.rating_history if h['player_name'] == player_name]
+        last_30 = player_history[-30:]
+        last_30_handicaps = [h.get('handicap', 100) for h in last_30]
+        avg_hc = round(sum(last_30_handicaps) / len(last_30_handicaps), 1) if last_30_handicaps else 100.0
+        ratings_list.append({
+            "name": player_name,
+            "mu_scaled": round(player_rating_obj.get_scaled_mu(), 2),
+            "sigma_scaled": round(player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR, 2),
+            "mu_unscaled": round(player_rating_obj.rating.mu, 4),
+            "sigma_unscaled": round(player_rating_obj.rating.sigma, 4),
+            "games_played": player_rating_obj.games_played,
+            "games_rated": player_rating_obj.games_rated,
+            "confidence_percent": round(
+                player_rating_obj.get_confidence_percent(config.TRUESKILL_SIGMA), 1
+            ),
+            "avg_handicap_last_30": avg_hc,
+        })
+    ratings_list.sort(key=lambda x: x['mu_scaled'], reverse=True)
+
+    tmp_ratings = ratings_path + ".tmp"
+    with open(tmp_ratings, 'w') as f:
+        json.dump(ratings_list, f, indent=2)
+    os.rename(tmp_ratings, ratings_path)
+    logging.info(f"Player ratings saved to: {ratings_path}")
+
+    # Build rating history
+    serializable_history = [
+        {
+            "game_index": h["game_index"],
+            "player_name": h["player_name"],
+            "mu": round(h["mu"], 2),
+            "sigma": round(h["sigma"], 2),
+        }
+        for h in calculator.rating_history
+    ]
+    history_data = {
+        "history": serializable_history,
+        "lan_events": lan_events or [],
+    }
+    tmp_history = history_path + ".tmp"
+    with open(tmp_history, 'w') as f:
+        json.dump(history_data, f)
+    os.rename(tmp_history, history_path)
+    logging.info(f"Rating history saved to: {history_path}")
+
+    return calculator.player_ratings, calculator.rating_history, lan_events
 
 
 def main():
