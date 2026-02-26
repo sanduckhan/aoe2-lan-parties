@@ -482,6 +482,7 @@ class IncrementalProcessor:
         })
 
         new_games = []
+        seen_fingerprints = set()
         counts = defaultdict(int)
 
         for i, replay_info in enumerate(replay_list, 1):
@@ -498,12 +499,24 @@ class IncrementalProcessor:
                 continue
 
             entry = replay_to_registry_entry(file_bytes, sha)
+
+            # Fingerprint dedup: same game recorded by different players
+            fp = entry.get("fingerprint")
+            if fp and fp in seen_fingerprints:
+                logger.info(f"Skipping fingerprint duplicate: {sha}")
+                counts["fingerprint_duplicate"] += 1
+                self._full_rebuild_progress["counts"] = dict(counts)
+                continue
+            if fp:
+                seen_fingerprints.add(fp)
+
             new_games.append(entry)
             counts[entry["status"]] += 1
             self._full_rebuild_progress["counts"] = dict(counts)
 
         # Replace entire registry
         self._full_rebuild_progress["phase"] = "replacing_registry"
+        logger.info(f"Deduped: {len(new_games)} unique games from {total} replays")
         self._registry.replace_all(new_games)
 
         # Rebuild TrueSkill
