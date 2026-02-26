@@ -6,12 +6,9 @@ from datetime import datetime
 from collections import defaultdict
 from typing import List, Dict, Tuple, Optional, Any
 
+import json
 import trueskill
 from mgz.model import parse_match, Player as MgzPlayer # Added MgzPlayer for type hinting
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import json # Added for JSON export
 
 # --- Add project root to sys.path to allow importing config from analyzer_lib ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -378,6 +375,10 @@ class ReportGenerator:
         if not rating_history:
             logging.info("No rating history recorded, skipping plot generation.")
             return
+
+        import pandas as pd
+        import matplotlib.pyplot as plt
+        import seaborn as sns
 
         df = pd.DataFrame(rating_history)
         plt.style.use('seaborn-v0_8-whitegrid')
