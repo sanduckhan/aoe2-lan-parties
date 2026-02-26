@@ -16,25 +16,34 @@
     <div class="grain-overlay"></div>
 
     <header>
-        <div class="header-content">
+        <div class="header-top">
             <div class="header-title">
                 <span class="header-icon">&#9876;</span>
                 <h1>War Council</h1>
                 <span class="header-subtitle">Age of Empires II &mdash; LAN Party</span>
             </div>
-            <div class="nav-row">
-                <nav>
+            <div class="header-actions">
+                <button class="sound-toggle" onclick="toggleSound()" title="Toggle sounds">
+                    <span id="sound-icon">&#x1F50A;</span>
+                </button>
+                <button class="nav-burger" onclick="toggleMobileNav()" aria-label="Toggle navigation">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </div>
+        <nav class="header-nav" id="header-nav">
+            <div class="nav-strip">
+                <div class="nav-tabs">
                     <button class="tab active" data-tab="ratings">Rankings</button>
                     <button class="tab" data-tab="awards">Hall of Fame</button>
                     <button class="tab" data-tab="history">Chronicles</button>
                     <button class="tab" data-tab="generator">War Room</button>
                     <button class="tab" data-tab="game">Battle</button>
-                </nav>
-                <button class="sound-toggle" onclick="toggleSound()" title="Toggle sounds">
-                    <span id="sound-icon">&#x1F50A;</span>
-                </button>
+                </div>
+                <div class="nav-divider"></div>
+                <button class="tab tab-utility" data-tab="uploader">&#8681; Uploader</button>
             </div>
-        </div>
+        </nav>
     </header>
 
     <main>
@@ -273,6 +282,78 @@
                 <div class="manual-actions">
                     <button class="btn-primary" onclick="confirmManualSetup()">Commence Battle</button>
                     <button class="btn-secondary" onclick="cancelManualSetup()">Retreat</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Uploader Tab -->
+        <section id="uploader" class="tab-content">
+            <div class="uploader-page">
+                <div class="section-header">
+                    <h2>Replay Uploader</h2>
+                    <p class="section-desc">Automatically upload your game replays to the War Council</p>
+                </div>
+
+                <div class="uploader-hero">
+                    <div class="uploader-icon">&#8681;</div>
+                    <a href="/static/downloads/AoE2-Uploader.zip" download class="btn-download">
+                        Download for Windows
+                    </a>
+                    <span class="uploader-fileinfo">AoE2-Uploader.zip &mdash; contains AoE2 Uploader.exe</span>
+                </div>
+
+                <div class="uploader-section">
+                    <h3>What does it do?</h3>
+                    <p>
+                        The AoE2 Uploader is a lightweight Windows tool that watches your
+                        Age of Empires II replay folder and automatically uploads new
+                        <code>.aoe2record</code> files to the War Council server. Once uploaded,
+                        replays are parsed and player ratings, awards, and statistics are
+                        updated in real time.
+                    </p>
+                    <p>No more manually copying replay files &mdash; just play and the results appear here.</p>
+                </div>
+
+                <div class="uploader-section">
+                    <h3>Installation</h3>
+                    <ol class="uploader-steps">
+                        <li>
+                            <strong>Download</strong> the zip file using the button above.
+                        </li>
+                        <li>
+                            <strong>Extract</strong> <code>AoE2 Uploader.exe</code> from the zip to any folder
+                            (e.g. your Desktop or Documents).
+                        </li>
+                        <li>
+                            <strong>Run</strong> <code>AoE2 Uploader.exe</code>. Windows may show a
+                            SmartScreen warning since the app is unsigned &mdash; click
+                            <em>"More info"</em> then <em>"Run anyway"</em>.
+                        </li>
+                        <li>
+                            <strong>Configure</strong> the server URL and API key when prompted (ask the LAN party host for these).
+                        </li>
+                        <li>
+                            <strong>Play!</strong> The uploader runs in the background and sends new replays
+                            as soon as each game ends.
+                        </li>
+                    </ol>
+                </div>
+
+                <div class="uploader-section">
+                    <h3>Requirements</h3>
+                    <ul class="uploader-list">
+                        <li>Windows 10 or later</li>
+                        <li>Age of Empires II: Definitive Edition</li>
+                        <li>Network access to the War Council server</li>
+                    </ul>
+                </div>
+
+                <div class="uploader-section">
+                    <h3>Troubleshooting</h3>
+                    <ul class="uploader-list">
+                        <li><strong>SmartScreen blocks the app</strong> &mdash; Click "More info" &rarr; "Run anyway". The exe is unsigned but safe.</li>
+                        <li><strong>Replays not detected</strong> &mdash; Verify the replay folder path in the uploader settings matches where AoE2:DE saves your recordings.</li>
+                    </ul>
                 </div>
             </div>
         </section>

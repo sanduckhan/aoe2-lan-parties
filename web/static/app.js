@@ -30,6 +30,12 @@ function toggleSound() {
     document.getElementById('sound-icon').textContent = on ? '\uD83D\uDD0A' : '\uD83D\uDD07';
 }
 
+function toggleMobileNav() {
+    const nav = document.getElementById('header-nav');
+    nav.classList.toggle('open');
+    document.body.classList.toggle('nav-open');
+}
+
 // =====================
 // STATE
 // =====================
@@ -50,7 +56,7 @@ let historyFetched = false;
 let lanEventsFetched = false;
 let lanEventsData = [];
 
-const VALID_TABS = ['ratings', 'awards', 'history', 'generator', 'game'];
+const VALID_TABS = ['ratings', 'awards', 'history', 'generator', 'game', 'uploader'];
 
 document.querySelectorAll('.tab').forEach(btn => {
     btn.addEventListener('click', () => navigateTo(btn.dataset.tab));
@@ -71,6 +77,11 @@ function switchTab(tabId) {
     const tabBtn = document.querySelector(`.tab[data-tab="${tabId}"]`);
     if (tabBtn) tabBtn.classList.add('active');
     document.getElementById(tabId).classList.add('active');
+
+    // Close mobile nav on tab switch
+    const nav = document.getElementById('header-nav');
+    if (nav) nav.classList.remove('open');
+    document.body.classList.remove('nav-open');
 
     // Close player modal if open and we're navigating to a tab
     const modal = document.getElementById('player-modal');
@@ -569,7 +580,7 @@ function renderGameHistory(games) {
         const dateStr = g.datetime !== '0001-01-01T00:00:00' ? new Date(g.datetime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : '?';
 
         const redeployBtn = g.has_winner
-            ? `<button class="btn-chronicle-redeploy" onclick="redeployFromChronicle(${i})" title="Redeploy these teams">&#9876;</button>`
+            ? `<button class="btn-chronicle-redeploy" onclick="redeployFromChronicle(${i})" title="Redeploy these teams">Redeploy</button>`
             : '';
 
         return `
