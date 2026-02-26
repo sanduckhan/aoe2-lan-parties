@@ -106,7 +106,7 @@ Each game entry contains:
 
 - **SQLite storage**: All data stored in a single `aoe2_data.db` file (WAL mode). Game inserts are O(1) instead of rewriting the entire file. Lookups by SHA256 or fingerprint use indexed queries. No JSON files need to be loaded into memory at startup.
 - **Per-game rating deltas**: `run_trueskill_from_registry()` returns `rating_deltas` (`sha256 → {player → delta}`). These are merged into `game_results` in the analysis cache as `rating_changes`, then served via `/api/games` and displayed in Battle Chronicles next to each player name.
-- **Debounced rebuilds**: When replays are uploaded via the web UI, stats/ratings rebuilds are debounced with a 30-second timer (`IncrementalProcessor.REBUILD_DELAY`). Each upload resets the timer. The rebuild only fires once uploads stop for the full delay period, preventing expensive recomputation during bulk uploads.
+- **Debounced rebuilds**: When replays are uploaded via the web UI, stats/ratings rebuilds are debounced with a 60-second timer (`IncrementalProcessor.REBUILD_DELAY`). Every upload resets the timer (including duplicates and errors), so the rebuild only fires once uploads stop for the full delay period. Concurrent rebuilds are prevented: if a rebuild is already running when the timer fires, it re-schedules instead of starting a second one.
 - **Registry-first architecture**: Replays are parsed once and all extracted data is cached in the `games` table. Stats and ratings are always rebuilt from the registry, never by re-parsing replays.
 - **Player aliasing**: Players with multiple accounts are consolidated via `PLAYER_ALIASES` in config.py. Applied during replay parsing in `replay_to_registry_entry()`.
 - **Chronological ordering**: Games are sorted by datetime parsed from replay filenames (regex). This is critical for losing streak calculation and TrueSkill evolution accuracy.
@@ -116,7 +116,7 @@ Each game entry contains:
 
 ### Server (`server/`)
 
-- **processing.py** — `GameRegistry` class (SQLite-backed storage with indexed SHA256/fingerprint lookups, `source_path` backfill via `update_source_path()`), `IncrementalProcessor` (handles web uploads: parse → dedup → store → debounced rebuild). Rebuilds are debounced: a 30-second timer resets on each upload, only firing once uploads stop. Delegates parsing to `registry_builder.replay_to_registry_entry()` and stats to `registry_stats.accumulate_stats_from_games()`. Rating deltas from TrueSkill are passed through to `rebuild_analysis_from_registry()` for embedding in game results.
+- **processing.py** — `GameRegistry` class (SQLite-backed storage with indexed SHA256/fingerprint lookups, `source_path` backfill via `update_source_path()`), `IncrementalProcessor` (handles web uploads: parse → dedup → store → debounced rebuild). Rebuilds are debounced: a 60-second timer resets on every upload (including duplicates/errors), only firing once uploads stop. Concurrent rebuilds are prevented via `_rebuilding` guard. Full rebuilds (`/api/rebuild`) run in a background thread with progress tracking via `/api/rebuild/status`. Delegates parsing to `registry_builder.replay_to_registry_entry()` and stats to `registry_stats.accumulate_stats_from_games()`. Rating deltas from TrueSkill are passed through to `rebuild_analysis_from_registry()` for embedding in game results.
 - **storage.py** — S3-compatible bucket operations for replay file storage (upload/download).
 - **migrate.py** — One-time bulk migration: scans replay directory, parses all files via `replay_to_registry_entry()`, builds registry, optionally uploads to bucket.
 
@@ -139,7 +139,7 @@ Standalone utilities that import from `analyzer_lib/`.
 
 ### Web UI (`web/`)
 
-- **app.py** — Flask routes serving the single-page HTML and JSON API endpoints (`/api/players`, `/api/teams/generate`, `/api/teams/rebalance`, `/api/games`, `/api/games/<sha256>/download`, `/api/awards`, `/api/stats`, `/api/player/<name>`, `/api/rating-history`, `/api/lan-events`, `/api/upload`, `/api/rebuild`).
+- **app.py** — Flask routes serving the single-page HTML and JSON API endpoints (`/api/players`, `/api/teams/generate`, `/api/teams/rebalance`, `/api/games`, `/api/games/<sha256>/download`, `/api/awards`, `/api/stats`, `/api/player/<name>`, `/api/rating-history`, `/api/lan-events`, `/api/upload`, `/api/rebuild`, `/api/rebuild/status`).
 - **services.py** — Business logic bridge between Flask routes and `analyzer_lib`/scripts. Reads all data from SQLite via `analyzer_lib.db`. Handles player ratings, team generation, rebalance, game history, player profiles, LAN event awards, replay downloads, and upload processing.
 - **templates/index.html** — Single-page UI with tabs for Ratings, Awards, Battle Chronicles, Team Generator, Game View, and Uploader.
 - **static/app.js** — Client-side JavaScript for tab navigation, API calls, dynamic rendering, rating evolution chart (Chart.js), and sound effects.

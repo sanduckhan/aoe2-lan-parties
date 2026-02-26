@@ -214,3 +214,9 @@ def api_rebuild():
     if "error" in result:
         return jsonify(result), 500
     return jsonify(result), 200
+
+
+@app.route("/api/rebuild/status")
+@require_api_key
+def api_rebuild_status():
+    return jsonify(services.get_rebuild_status()), 200

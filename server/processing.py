@@ -224,12 +224,14 @@ class IncrementalProcessor:
     in registry, rebuild TrueSkill, and update analysis data.
 
     Processing is serialized via a lock (no concurrent processing).
-    Rebuilds are debounced: after each upload, a 30-second timer starts.
+    Rebuilds are debounced: after each upload, a 60-second timer starts.
     If another upload arrives before the timer fires, it resets.
-    The rebuild only runs once uploads stop for 30 seconds.
+    The rebuild only runs once uploads stop for 60 seconds.
+    Concurrent rebuilds are prevented: if a rebuild is already running
+    when the timer fires, it's skipped but re-scheduled.
     """
 
-    REBUILD_DELAY = 30  # seconds of quiet before triggering rebuild
+    REBUILD_DELAY = 60  # seconds of quiet before triggering rebuild
 
     def __init__(self, registry: GameRegistry, storage_module=None):
         self._registry = registry
@@ -239,6 +241,7 @@ class IncrementalProcessor:
         self._rebuild_timer = None
         self._rebuild_timer_lock = threading.Lock()
         self._pending_rebuild = False
+        self._rebuilding = False
 
     def process_new_replay(self, file_bytes: bytes, sha256: str, uploader_info=None):
         """Process a new replay file end-to-end.
@@ -247,6 +250,7 @@ class IncrementalProcessor:
         """
         # Quick dedup check (no lock needed — registry has its own lock)
         if self._registry.has_game(sha256):
+            self._schedule_rebuild()
             return {
                 "status": "duplicate",
                 "sha256": sha256,
@@ -256,6 +260,7 @@ class IncrementalProcessor:
         with self._lock:
             # Double-check after acquiring lock
             if self._registry.has_game(sha256):
+                self._schedule_rebuild()
                 return {
                     "status": "duplicate",
                     "sha256": sha256,
@@ -276,6 +281,7 @@ class IncrementalProcessor:
         if entry["status"] in ("parse_error", "too_short", "unknown_player"):
             # For parse errors with specific messages, store them
             self._registry.add_game(entry)
+            self._schedule_rebuild()
             return {
                 "status": entry["status"],
                 "sha256": sha256,
@@ -287,6 +293,7 @@ class IncrementalProcessor:
         # --- Fingerprint dedup (same game recorded by different players) ---
         fingerprint = entry.get("fingerprint")
         if fingerprint and self._registry.has_fingerprint(fingerprint):
+            self._schedule_rebuild()
             return {
                 "status": "duplicate",
                 "sha256": sha256,
@@ -343,33 +350,51 @@ class IncrementalProcessor:
             )
 
     def _run_rebuild(self):
-        """Execute the deferred rebuild (called by the timer thread)."""
+        """Execute the deferred rebuild (called by the timer thread).
+
+        If a rebuild is already running, skip this one but re-schedule
+        so the new data is eventually picked up.
+        """
         with self._rebuild_timer_lock:
             self._rebuild_timer = None
+            if self._rebuilding:
+                logger.info("Rebuild already in progress, re-scheduling")
+                self._pending_rebuild = True
+                self._rebuild_timer = threading.Timer(
+                    self.REBUILD_DELAY, self._run_rebuild
+                )
+                self._rebuild_timer.daemon = True
+                self._rebuild_timer.start()
+                return
+            self._rebuilding = True
             self._pending_rebuild = False
 
         logger.info("Deferred rebuild starting...")
         start = time.time()
 
-        rating_deltas = {}
         try:
-            processed_games = self._registry.get_games(status="processed")
-            _, _, _, rating_deltas = run_trueskill_from_registry(
-                processed_games, data_dir=self._data_dir
-            )
-        except Exception as e:
-            logger.error(f"TrueSkill rebuild failed: {e}")
+            rating_deltas = {}
+            try:
+                processed_games = self._registry.get_games(status="processed")
+                _, _, _, rating_deltas = run_trueskill_from_registry(
+                    processed_games, data_dir=self._data_dir
+                )
+            except Exception as e:
+                logger.error(f"TrueSkill rebuild failed: {e}")
 
-        try:
-            rebuild_analysis_from_registry(
-                self._registry,
-                data_dir=self._data_dir,
-                rating_deltas=rating_deltas,
-            )
-        except Exception as e:
-            logger.error(f"Analysis rebuild failed: {e}")
+            try:
+                rebuild_analysis_from_registry(
+                    self._registry,
+                    data_dir=self._data_dir,
+                    rating_deltas=rating_deltas,
+                )
+            except Exception as e:
+                logger.error(f"Analysis rebuild failed: {e}")
 
-        logger.info(f"Deferred rebuild complete in {time.time() - start:.1f}s")
+            logger.info(f"Deferred rebuild complete in {time.time() - start:.1f}s")
+        finally:
+            with self._rebuild_timer_lock:
+                self._rebuilding = False
 
     @property
     def rebuild_pending(self):
@@ -378,71 +403,137 @@ class IncrementalProcessor:
             return self._pending_rebuild
 
     def full_rebuild(self):
-        """Rebuild all data from scratch by re-downloading replays from bucket.
+        """Kick off a full rebuild in a background thread.
 
-        Downloads all replays from bucket, parses each, rebuilds registry,
-        then runs TrueSkill and analysis rebuilds.
-
-        Returns a summary dict.
+        Returns immediately with status info. Use full_rebuild_status
+        to poll progress.
         """
         if not self._storage:
             return {"error": "No storage module configured."}
 
-        with self._lock:
-            start_time = time.time()
-            replay_list = self._storage.list_replays()
-            total = len(replay_list)
-            logger.info(f"Full rebuild: found {total} replays in bucket")
+        with self._rebuild_timer_lock:
+            if self._rebuilding:
+                return {
+                    "status": "already_running",
+                    "progress": self._full_rebuild_progress.copy(),
+                    "message": "A rebuild is already in progress.",
+                }
 
-            new_games = []
-            counts = defaultdict(int)
+        self._full_rebuild_progress = {
+            "phase": "starting",
+            "current": 0,
+            "total": 0,
+            "counts": {},
+        }
 
-            for i, replay_info in enumerate(replay_list, 1):
-                sha = replay_info["sha256"]
-                logger.info(f"Processing replay {i}/{total}: {sha}")
+        thread = threading.Thread(target=self._full_rebuild_worker, daemon=True)
+        thread.start()
 
-                try:
-                    file_bytes = self._storage.download_replay(sha)
-                except Exception as e:
-                    logger.error(f"Download failed for {sha}: {e}")
-                    counts["download_error"] += 1
-                    continue
+        return {
+            "status": "started",
+            "message": "Full rebuild started in background. Poll /api/rebuild/status for progress.",
+        }
 
-                entry = replay_to_registry_entry(file_bytes, sha)
-                new_games.append(entry)
-                counts[entry["status"]] += 1
+    @property
+    def full_rebuild_status(self):
+        """Return current full rebuild progress."""
+        progress = getattr(self, "_full_rebuild_progress", None)
+        if progress is None:
+            return {"status": "idle", "message": "No rebuild running or completed."}
+        with self._rebuild_timer_lock:
+            running = self._rebuilding
+        return {
+            "status": "running" if running else "complete",
+            "progress": progress.copy(),
+        }
 
-            # Replace entire registry
-            self._registry.replace_all(new_games)
+    def _full_rebuild_worker(self):
+        """Background worker for full rebuild."""
+        with self._rebuild_timer_lock:
+            if self._rebuilding:
+                logger.warning("Full rebuild skipped — another rebuild is running")
+                return
+            self._rebuilding = True
 
-            # Rebuild TrueSkill
-            rating_deltas = {}
+        # Cancel any pending deferred rebuild
+        with self._rebuild_timer_lock:
+            if self._rebuild_timer is not None:
+                self._rebuild_timer.cancel()
+                self._rebuild_timer = None
+            self._pending_rebuild = False
+
+        try:
+            self._full_rebuild_inner()
+        finally:
+            with self._rebuild_timer_lock:
+                self._rebuilding = False
+
+    def _full_rebuild_inner(self):
+        """Core full rebuild logic (runs in background thread)."""
+        start_time = time.time()
+
+        replay_list = self._storage.list_replays()
+        total = len(replay_list)
+        logger.info(f"Full rebuild: found {total} replays in bucket")
+
+        self._full_rebuild_progress.update({
+            "phase": "downloading_and_parsing",
+            "total": total,
+        })
+
+        new_games = []
+        counts = defaultdict(int)
+
+        for i, replay_info in enumerate(replay_list, 1):
+            sha = replay_info["sha256"]
+            logger.info(f"Processing replay {i}/{total}: {sha}")
+            self._full_rebuild_progress["current"] = i
+
             try:
-                processed_games = [g for g in new_games if g["status"] == "processed"]
-                _, _, _, rating_deltas = run_trueskill_from_registry(
-                    processed_games, data_dir=self._data_dir
-                )
+                file_bytes = self._storage.download_replay(sha)
             except Exception as e:
-                logger.error(f"TrueSkill rebuild during full rebuild failed: {e}")
+                logger.error(f"Download failed for {sha}: {e}")
+                counts["download_error"] += 1
+                self._full_rebuild_progress["counts"] = dict(counts)
+                continue
 
-            # Rebuild analysis
-            try:
-                rebuild_analysis_from_registry(
-                    self._registry,
-                    data_dir=self._data_dir,
-                    rating_deltas=rating_deltas,
-                )
-            except Exception as e:
-                logger.error(f"Analysis rebuild during full rebuild failed: {e}")
+            entry = replay_to_registry_entry(file_bytes, sha)
+            new_games.append(entry)
+            counts[entry["status"]] += 1
+            self._full_rebuild_progress["counts"] = dict(counts)
 
-            duration = time.time() - start_time
-            summary = {
-                "total_replays": total,
-                "counts": dict(counts),
-                "duration_seconds": round(duration, 1),
-            }
-            logger.info(f"Full rebuild complete: {summary}")
-            return summary
+        # Replace entire registry
+        self._full_rebuild_progress["phase"] = "replacing_registry"
+        self._registry.replace_all(new_games)
+
+        # Rebuild TrueSkill
+        self._full_rebuild_progress["phase"] = "rebuilding_trueskill"
+        rating_deltas = {}
+        try:
+            processed_games = [g for g in new_games if g["status"] == "processed"]
+            _, _, _, rating_deltas = run_trueskill_from_registry(
+                processed_games, data_dir=self._data_dir
+            )
+        except Exception as e:
+            logger.error(f"TrueSkill rebuild during full rebuild failed: {e}")
+
+        # Rebuild analysis
+        self._full_rebuild_progress["phase"] = "rebuilding_analysis"
+        try:
+            rebuild_analysis_from_registry(
+                self._registry,
+                data_dir=self._data_dir,
+                rating_deltas=rating_deltas,
+            )
+        except Exception as e:
+            logger.error(f"Analysis rebuild during full rebuild failed: {e}")
+
+        duration = time.time() - start_time
+        self._full_rebuild_progress.update({
+            "phase": "done",
+            "duration_seconds": round(duration, 1),
+        })
+        logger.info(f"Full rebuild complete in {duration:.1f}s: {counts}")
 
 
 def rebuild_analysis_from_registry(registry, data_dir=None, rating_deltas=None):

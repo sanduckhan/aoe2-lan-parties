@@ -506,3 +506,9 @@ def trigger_rebuild() -> Dict[str, Any]:
     """Trigger a full rebuild from all bucket replays."""
     processor = _get_processor()
     return processor.full_rebuild()
+
+
+def get_rebuild_status() -> Dict[str, Any]:
+    """Return current full rebuild progress."""
+    processor = _get_processor()
+    return processor.full_rebuild_status
