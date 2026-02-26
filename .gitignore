@@ -19,6 +19,12 @@ parsed_games/*
 !parsed_games/.gitkeep
 *.log
 debug_summary_output.json
+
+# Generated data files (produced by the processing pipeline)
+analysis_data.json
+player_ratings.json
+rating_history.json
+game_registry.json
 plots/*
 !plots/.gitkeep
 
