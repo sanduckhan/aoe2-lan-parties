@@ -24,5 +24,6 @@ COPY run_web.py ./
 # Data directory (Railway persistent volume mount point)
 ENV DATA_DIR=/app/data
 
-# Gunicorn with extended timeout for rebuild endpoint
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 600 web.app:app
+# Single worker with threads: all threads share memory so background rebuild
+# progress is visible to status endpoint. Timeout kept high for long requests.
+CMD gunicorn --bind 0.0.0.0:$PORT --worker-class gthread --workers 1 --threads 4 --timeout 600 web.app:app
