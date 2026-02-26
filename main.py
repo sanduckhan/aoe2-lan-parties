@@ -1,11 +1,10 @@
 # main.py - Main entry point for the AoE2 LAN Party Analyzer
 
-import json
 import logging
 import os
 import sys
 
-from analyzer_lib import config
+from analyzer_lib import config, db
 from analyzer_lib.registry_builder import sync_registry_from_disk
 from analyzer_lib.registry_stats import accumulate_stats_from_games
 from analyzer_lib.report_generator import (
@@ -16,12 +15,12 @@ from analyzer_lib.report_generator import (
 )
 
 # Allow importing from scripts/ and server/
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
 from calculate_trueskill import run_trueskill_from_registry
 
 from server.processing import GameRegistry
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
 def main():
@@ -57,8 +56,8 @@ def main():
     )
 
     # Step 4: Accumulate stats from registry (no replay parsing)
-    player_stats, game_stats, game_results, head_to_head = (
-        accumulate_stats_from_games(analysis_games)
+    player_stats, game_stats, game_results, head_to_head = accumulate_stats_from_games(
+        analysis_games
     )
 
     # Step 5: Merge rating deltas into game_results
@@ -70,7 +69,7 @@ def main():
     # Step 6: Print CLI report
     print_report(player_stats, game_stats)
 
-    # Step 7: Save analysis_data.json
+    # Step 7: Save analysis data to SQLite
     analysis_data = {
         "awards": compute_all_awards(player_stats, game_stats),
         "general_stats": compute_general_stats(game_stats),
@@ -78,12 +77,12 @@ def main():
         "player_profiles": compute_player_profiles(player_stats, head_to_head),
     }
 
-    output_path = os.path.join(config.DATA_DIR, "analysis_data.json")
-    with open(output_path, "w") as f:
-        json.dump(analysis_data, f, indent=2, default=str)
-    print(f"Analysis data saved to {output_path}")
+    db_path = db.get_db_path(config.DATA_DIR)
+    db.save_analysis_data(db_path, analysis_data)
+    print(f"Analysis data saved to {db_path}")
 
     print("--- AoE2 LAN Party Analyzer Finished ---")
+
 
 if __name__ == "__main__":
     main()

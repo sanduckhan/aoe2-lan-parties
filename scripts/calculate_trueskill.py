@@ -16,13 +16,19 @@ sys.path.append(PROJECT_ROOT)
 from analyzer_lib import config
 
 # --- Logging Setup ---
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # --- Constants ---
-PLOT_MIN_GAMES_THRESHOLD = config.PLOT_MIN_GAMES_THRESHOLD if hasattr(config, 'PLOT_MIN_GAMES_THRESHOLD') else 5
+PLOT_MIN_GAMES_THRESHOLD = (
+    config.PLOT_MIN_GAMES_THRESHOLD
+    if hasattr(config, "PLOT_MIN_GAMES_THRESHOLD")
+    else 5
+)
+
 
 class PlayerRating:
     """Represents a player's TrueSkill rating and game statistics."""
+
     def __init__(self, name: str, initial_rating: trueskill.Rating):
         self.name = name
         self.rating: trueskill.Rating = initial_rating
@@ -46,8 +52,10 @@ class PlayerRating:
             return 100.0 if self.rating.sigma == 0 else 0.0
         return max(0.0, (1.0 - self.rating.sigma / initial_unscaled_sigma)) * 100.0
 
+
 class _PlayerStub:
     """Lightweight player stub for constructing GameData from registry entries."""
+
     def __init__(self, name: str, team_id: int, winner: bool, handicap: int = 100):
         self.name = name
         self.team_id = team_id
@@ -57,9 +65,16 @@ class _PlayerStub:
 
 class GameData:
     """Stores relevant information about a single game for TrueSkill calculation."""
-    def __init__(self, filename: str, datetime_obj: datetime,
-                 human_players: list, teams_data: dict,
-                 winning_team_id: Optional[int], sha256: str = ""):
+
+    def __init__(
+        self,
+        filename: str,
+        datetime_obj: datetime,
+        human_players: list,
+        teams_data: dict,
+        winning_team_id: Optional[int],
+        sha256: str = "",
+    ):
         self.filename = filename
         self.datetime_obj = datetime_obj
         self.human_players = human_players
@@ -68,7 +83,7 @@ class GameData:
         self.sha256 = sha256
 
     @classmethod
-    def from_registry_entry(cls, entry: Dict[str, Any]) -> Optional['GameData']:
+    def from_registry_entry(cls, entry: Dict[str, Any]) -> Optional["GameData"]:
         """Create a lightweight GameData from a game registry entry.
 
         Constructs stub player objects with the attributes needed by
@@ -99,7 +114,9 @@ class GameData:
                 teams_data[team_id] = team_players
 
             winning_team_id_raw = entry.get("winning_team_id")
-            winning_team_id = int(winning_team_id_raw) if winning_team_id_raw is not None else None
+            winning_team_id = (
+                int(winning_team_id_raw) if winning_team_id_raw is not None else None
+            )
 
             return cls(
                 filename=entry.get("filename", ""),
@@ -115,35 +132,49 @@ class GameData:
 
     def get_player_handicaps(self) -> Dict[str, int]:
         """Returns a dict mapping player name -> handicap value (100 = normal)."""
-        return {p.name: getattr(p, 'handicap', 100) for p in self.human_players}
+        return {p.name: getattr(p, "handicap", 100) for p in self.human_players}
 
     def is_valid_for_rating(self) -> bool:
         if self.winning_team_id is None:
             logging.debug(f"Game {self.filename} invalid for rating: No clear winner.")
             return False
         if len(self.teams_data) != 2:
-            logging.debug(f"Game {self.filename} invalid for rating: Not exactly 2 teams (found {len(self.teams_data)}).")
+            logging.debug(
+                f"Game {self.filename} invalid for rating: Not exactly 2 teams (found {len(self.teams_data)})."
+            )
             return False
 
         team_player_lists = list(self.teams_data.values())
         if not team_player_lists[0] or not team_player_lists[1]:
-            logging.debug(f"Game {self.filename} invalid for rating: At least one team has zero players.")
+            logging.debug(
+                f"Game {self.filename} invalid for rating: At least one team has zero players."
+            )
             return False
         return True
 
+
 class TrueSkillCalculator:
     """Manages TrueSkill environment, player ratings, and updates."""
-    def __init__(self, mu: float, sigma: float, beta: float, tau: float, draw_probability: float):
-        self.ts_env = trueskill.TrueSkill(mu=mu, sigma=sigma, beta=beta, tau=tau, draw_probability=draw_probability)
+
+    def __init__(
+        self, mu: float, sigma: float, beta: float, tau: float, draw_probability: float
+    ):
+        self.ts_env = trueskill.TrueSkill(
+            mu=mu, sigma=sigma, beta=beta, tau=tau, draw_probability=draw_probability
+        )
         self.player_ratings: Dict[str, PlayerRating] = {}
         self.rating_history: List[Dict[str, Any]] = []
 
     def get_or_create_player_rating(self, player_name: str) -> PlayerRating:
         if player_name not in self.player_ratings:
-            self.player_ratings[player_name] = PlayerRating(player_name, self.ts_env.create_rating())
+            self.player_ratings[player_name] = PlayerRating(
+                player_name, self.ts_env.create_rating()
+            )
         return self.player_ratings[player_name]
 
-    def update_ratings_for_game(self, game_data: GameData, game_index: int) -> Dict[str, float]:
+    def update_ratings_for_game(
+        self, game_data: GameData, game_index: int
+    ) -> Dict[str, float]:
         """Update ratings for all players in a game.
 
         Returns a dict mapping player_name -> rating delta (scaled mu change).
@@ -157,8 +188,14 @@ class TrueSkillCalculator:
 
         player_handicaps = game_data.get_player_handicaps()
 
-        team1_ratings_dict = {p.name: self.get_or_create_player_rating(p.name).rating for p in team1_player_objs}
-        team2_ratings_dict = {p.name: self.get_or_create_player_rating(p.name).rating for p in team2_player_objs}
+        team1_ratings_dict = {
+            p.name: self.get_or_create_player_rating(p.name).rating
+            for p in team1_player_objs
+        }
+        team2_ratings_dict = {
+            p.name: self.get_or_create_player_rating(p.name).rating
+            for p in team2_player_objs
+        }
 
         if game_data.winning_team_id == team1_id:
             ranks = [0, 1]
@@ -177,11 +214,13 @@ class TrueSkillCalculator:
         deltas = {}
         try:
             new_ratings_by_team = self.ts_env.rate(
-                [team1_ratings_dict, team2_ratings_dict],
-                ranks=ranks
+                [team1_ratings_dict, team2_ratings_dict], ranks=ranks
             )
 
-            updated_team1_ratings_map, updated_team2_ratings_map = new_ratings_by_team[0], new_ratings_by_team[1]
+            updated_team1_ratings_map, updated_team2_ratings_map = (
+                new_ratings_by_team[0],
+                new_ratings_by_team[1],
+            )
 
             for player_name, updated_map in [
                 *[(n, updated_team1_ratings_map) for n in team1_ratings_dict],
@@ -190,12 +229,16 @@ class TrueSkillCalculator:
                 player_rating_obj = self.get_or_create_player_rating(player_name)
                 player_rating_obj.increment_games_rated()
                 old_mu_scaled = player_rating_obj.get_scaled_mu()
-                old_sigma_scaled = player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
+                old_sigma_scaled = (
+                    player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
+                )
 
                 player_rating_obj.update_rating(updated_map[player_name])
 
                 new_mu_scaled = player_rating_obj.get_scaled_mu()
-                new_sigma_scaled = player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
+                new_sigma_scaled = (
+                    player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR
+                )
                 delta_mu = new_mu_scaled - old_mu_scaled
                 delta_sigma = new_sigma_scaled - old_sigma_scaled
                 deltas[player_name] = round(delta_mu, 2)
@@ -206,38 +249,60 @@ class TrueSkillCalculator:
                     f"mu: {old_mu_scaled:7.2f} -> {new_mu_scaled:7.2f} ({delta_mu:+.2f}) | "
                     f"sigma: {old_sigma_scaled:6.2f} -> {new_sigma_scaled:6.2f} ({delta_sigma:+.2f})"
                 )
-                self.rating_history.append({
-                    'game_index': game_index,
-                    'player_name': player_name,
-                    'mu': player_rating_obj.get_scaled_mu(),
-                    'sigma': player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR,
-                    'handicap': handicap,
-                    'datetime': game_data.datetime_obj,
-                })
+                self.rating_history.append(
+                    {
+                        "game_index": game_index,
+                        "player_name": player_name,
+                        "mu": player_rating_obj.get_scaled_mu(),
+                        "sigma": player_rating_obj.rating.sigma
+                        * config.TRUESKILL_ELO_SCALING_FACTOR,
+                        "handicap": handicap,
+                        "datetime": game_data.datetime_obj,
+                    }
+                )
 
         except Exception as e:
-            logging.error(f"Error updating TrueSkill ratings for game {game_data.filename}: {type(e).__name__} - {repr(e)}")
+            logging.error(
+                f"Error updating TrueSkill ratings for game {game_data.filename}: {type(e).__name__} - {repr(e)}"
+            )
 
         return deltas
 
 
-
 class ReportGenerator:
     """Generates textual and graphical reports for TrueSkill ratings."""
-    def __init__(self, elo_scaling_factor: float, initial_unscaled_sigma: float, plot_min_games: int):
+
+    def __init__(
+        self,
+        elo_scaling_factor: float,
+        initial_unscaled_sigma: float,
+        plot_min_games: int,
+    ):
         self.elo_scaling_factor = elo_scaling_factor
         self.initial_unscaled_sigma = initial_unscaled_sigma
         self.plot_min_games_threshold = plot_min_games
 
-    def print_final_rankings(self, player_ratings_map: Dict[str, PlayerRating], min_games_for_ranking: int):
+    def print_final_rankings(
+        self, player_ratings_map: Dict[str, PlayerRating], min_games_for_ranking: int
+    ):
         logging.info("\n--- Final TrueSkill Player Rankings ---")
 
-        all_players_sorted = sorted(player_ratings_map.values(), key=lambda p: p.rating.mu, reverse=True)
+        all_players_sorted = sorted(
+            player_ratings_map.values(), key=lambda p: p.rating.mu, reverse=True
+        )
 
-        ranked_players = [p for p in all_players_sorted if p.games_rated >= min_games_for_ranking]
-        provisional_players = [p for p in all_players_sorted if p.games_rated < min_games_for_ranking]
+        ranked_players = [
+            p for p in all_players_sorted if p.games_rated >= min_games_for_ranking
+        ]
+        provisional_players = [
+            p for p in all_players_sorted if p.games_rated < min_games_for_ranking
+        ]
 
-        print("\n--- Final TrueSkill Player Rankings ({} or more games) ---".format(min_games_for_ranking))
+        print(
+            "\n--- Final TrueSkill Player Rankings ({} or more games) ---".format(
+                min_games_for_ranking
+            )
+        )
         print("  Rank  Player               Mu (mu)    Confidence   Games")
         print("  -------------------------------------------------------------")
         if not ranked_players:
@@ -245,20 +310,37 @@ class ReportGenerator:
         else:
             for i, p_rating in enumerate(ranked_players):
                 mu_scaled = p_rating.get_scaled_mu()
-                confidence = p_rating.get_confidence_percent(self.initial_unscaled_sigma)
-                print(f"  {i+1:<5} {p_rating.name:<20} {mu_scaled:<10.2f} {confidence:>9.1f}%   {p_rating.games_played:>5}")
+                confidence = p_rating.get_confidence_percent(
+                    self.initial_unscaled_sigma
+                )
+                print(
+                    f"  {i+1:<5} {p_rating.name:<20} {mu_scaled:<10.2f} {confidence:>9.1f}%   {p_rating.games_played:>5}"
+                )
 
         if provisional_players:
-            print("\n--- Provisional Ratings (Less than {} games) ---".format(min_games_for_ranking))
+            print(
+                "\n--- Provisional Ratings (Less than {} games) ---".format(
+                    min_games_for_ranking
+                )
+            )
             print("        Player               Mu (mu)    Confidence   Games")
             print("  -------------------------------------------------------------")
             for p_rating in provisional_players:
                 mu_scaled = p_rating.get_scaled_mu()
-                confidence = p_rating.get_confidence_percent(self.initial_unscaled_sigma)
-                print(f"        {p_rating.name:<20} {mu_scaled:<10.2f} {confidence:>9.1f}%   {p_rating.games_played:>5}")
+                confidence = p_rating.get_confidence_percent(
+                    self.initial_unscaled_sigma
+                )
+                print(
+                    f"        {p_rating.name:<20} {mu_scaled:<10.2f} {confidence:>9.1f}%   {p_rating.games_played:>5}"
+                )
         print("\n  Higher Confidence indicates a more stable Mu rating.")
 
-    def plot_rating_evolution(self, rating_history: List[Dict[str, Any]], lan_events: List[Dict[str, Any]] = None, output_filename: str = 'trueskill_evolution.png'):
+    def plot_rating_evolution(
+        self,
+        rating_history: List[Dict[str, Any]],
+        lan_events: List[Dict[str, Any]] = None,
+        output_filename: str = "trueskill_evolution.png",
+    ):
         if not rating_history:
             logging.info("No rating history recorded, skipping plot generation.")
             return
@@ -268,22 +350,26 @@ class ReportGenerator:
         import seaborn as sns
 
         df = pd.DataFrame(rating_history)
-        plt.style.use('seaborn-v0_8-whitegrid')
+        plt.style.use("seaborn-v0_8-whitegrid")
         plt.figure(figsize=(18, 10))
 
-        player_game_counts = df.groupby('player_name')['game_index'].nunique()
-        players_to_plot = player_game_counts[player_game_counts > self.plot_min_games_threshold].index
-        df_filtered = df[df['player_name'].isin(players_to_plot)]
+        player_game_counts = df.groupby("player_name")["game_index"].nunique()
+        players_to_plot = player_game_counts[
+            player_game_counts > self.plot_min_games_threshold
+        ].index
+        df_filtered = df[df["player_name"].isin(players_to_plot)]
 
         if df_filtered.empty:
-            logging.info(f"No players have enough games (>{self.plot_min_games_threshold}) to be plotted. Skipping plot generation.")
+            logging.info(
+                f"No players have enough games (>{self.plot_min_games_threshold}) to be plotted. Skipping plot generation."
+            )
             return
 
         plt.figure(figsize=(15, 10))
         sns.set_style("whitegrid")
         sns.set_palette("tab20")
 
-        df_plot = df[df['player_name'].isin(players_to_plot)]
+        df_plot = df[df["player_name"].isin(players_to_plot)]
 
         if df_plot.empty:
             logging.info("No players meet the minimum game threshold for plotting.")
@@ -292,48 +378,74 @@ class ReportGenerator:
 
         sns.lineplot(
             data=df_plot,
-            x='game_index',
-            y='mu',
-            hue='player_name',
-            legend='full',
+            x="game_index",
+            y="mu",
+            hue="player_name",
+            legend="full",
             markers=True,
             dashes=False,
-            linewidth=2.5
+            linewidth=2.5,
         )
 
-        for player_name_val in df_filtered['player_name'].unique():
-            player_data = df_filtered[df_filtered['player_name'] == player_name_val]
+        for player_name_val in df_filtered["player_name"].unique():
+            player_data = df_filtered[df_filtered["player_name"] == player_name_val]
             plt.fill_between(
-                player_data['game_index'],
-                player_data['mu'] - player_data['sigma'],
-                player_data['mu'] + player_data['sigma'],
-                alpha=0.2
+                player_data["game_index"],
+                player_data["mu"] - player_data["sigma"],
+                player_data["mu"] + player_data["sigma"],
+                alpha=0.2,
             )
 
-        plt.title('TrueSkill Rating Evolution', fontsize=18, fontweight='bold')
-        plt.xlabel('Game Index (Chronological)', fontsize=14)
-        plt.ylabel(f'TrueSkill Rating (Scaled by {self.elo_scaling_factor})', fontsize=14)
-        plt.legend(title='Player', bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+        plt.title("TrueSkill Rating Evolution", fontsize=18, fontweight="bold")
+        plt.xlabel("Game Index (Chronological)", fontsize=14)
+        plt.ylabel(
+            f"TrueSkill Rating (Scaled by {self.elo_scaling_factor})", fontsize=14
+        )
+        plt.legend(
+            title="Player",
+            bbox_to_anchor=(1.05, 1),
+            loc="upper left",
+            borderaxespad=0.0,
+        )
         plt.xticks(fontsize=12)
         plt.yticks(fontsize=12)
-        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+        plt.grid(True, which="both", linestyle="--", linewidth=0.5)
 
         if lan_events:
             y_min, y_max = plt.ylim()
             for event in lan_events:
-                plt.axvspan(event['game_index_start'] - 0.5, event['game_index_end'] + 0.5,
-                           alpha=0.08, color='#c9a84c', zorder=0)
-                plt.axvline(x=event['game_index_start'], color='#c9a84c', linestyle='--',
-                           alpha=0.4, linewidth=1, zorder=1)
-                mid = (event['game_index_start'] + event['game_index_end']) / 2
-                plt.text(mid, y_max - (y_max - y_min) * 0.02, event['label'],
-                        ha='center', va='top', fontsize=7, color='#b08930',
-                        fontweight='bold', rotation=90)
+                plt.axvspan(
+                    event["game_index_start"] - 0.5,
+                    event["game_index_end"] + 0.5,
+                    alpha=0.08,
+                    color="#c9a84c",
+                    zorder=0,
+                )
+                plt.axvline(
+                    x=event["game_index_start"],
+                    color="#c9a84c",
+                    linestyle="--",
+                    alpha=0.4,
+                    linewidth=1,
+                    zorder=1,
+                )
+                mid = (event["game_index_start"] + event["game_index_end"]) / 2
+                plt.text(
+                    mid,
+                    y_max - (y_max - y_min) * 0.02,
+                    event["label"],
+                    ha="center",
+                    va="top",
+                    fontsize=7,
+                    color="#b08930",
+                    fontweight="bold",
+                    rotation=90,
+                )
 
         plt.tight_layout(rect=[0, 0, 0.85, 1])
 
         try:
-            plot_dir = os.path.join(PROJECT_ROOT, 'plots')
+            plot_dir = os.path.join(PROJECT_ROOT, "plots")
             os.makedirs(plot_dir, exist_ok=True)
             plot_path = os.path.join(plot_dir, output_filename)
             plt.savefig(plot_path)
@@ -342,6 +454,7 @@ class ReportGenerator:
             logging.error(f"Error saving plot: {e}")
         finally:
             plt.close()
+
 
 def detect_lan_events(rating_history, min_player_games=10):
     """Detect LAN party events from clusters of games played within a few days.
@@ -352,12 +465,12 @@ def detect_lan_events(rating_history, min_player_games=10):
     game_dates = {}
     game_players = defaultdict(set)
     for h in rating_history:
-        gi = h['game_index']
-        dt = h['datetime']
+        gi = h["game_index"]
+        dt = h["datetime"]
         if dt.year > 1:  # skip datetime.min
             if gi not in game_dates:
                 game_dates[gi] = dt
-            game_players[gi].add(h['player_name'])
+            game_players[gi].add(h["player_name"])
 
     if not game_dates:
         return []
@@ -392,14 +505,16 @@ def detect_lan_events(rating_history, min_player_games=10):
                 player_counts[name] += 1
 
         if max(player_counts.values(), default=0) >= min_player_games:
-            lan_events.append({
-                'start_date': cluster[0].isoformat(),
-                'end_date': cluster[-1].isoformat(),
-                'game_index_start': min(all_gis),
-                'game_index_end': max(all_gis),
-                'num_games': len(all_gis),
-                'label': f"LAN {cluster[0].strftime('%d %b %y')}",
-            })
+            lan_events.append(
+                {
+                    "start_date": cluster[0].isoformat(),
+                    "end_date": cluster[-1].isoformat(),
+                    "game_index_start": min(all_gis),
+                    "game_index_end": max(all_gis),
+                    "num_games": len(all_gis),
+                    "label": f"LAN {cluster[0].strftime('%d %b %y')}",
+                }
+            )
 
     return lan_events
 
@@ -460,37 +575,39 @@ def run_trueskill_from_registry(registry_games, data_dir=None):
 
     lan_events = detect_lan_events(calculator.rating_history)
 
-    # Save to data_dir instead of PROJECT_ROOT
-    ratings_path = os.path.join(output_dir, "player_ratings.json")
-    history_path = os.path.join(output_dir, "rating_history.json")
-
     # Build ratings list
     ratings_list = []
     for player_name, player_rating_obj in calculator.player_ratings.items():
-        player_history = [h for h in calculator.rating_history if h['player_name'] == player_name]
+        player_history = [
+            h for h in calculator.rating_history if h["player_name"] == player_name
+        ]
         last_30 = player_history[-30:]
-        last_30_handicaps = [h.get('handicap', 100) for h in last_30]
-        avg_hc = round(sum(last_30_handicaps) / len(last_30_handicaps), 1) if last_30_handicaps else 100.0
-        ratings_list.append({
-            "name": player_name,
-            "mu_scaled": round(player_rating_obj.get_scaled_mu(), 2),
-            "sigma_scaled": round(player_rating_obj.rating.sigma * config.TRUESKILL_ELO_SCALING_FACTOR, 2),
-            "mu_unscaled": round(player_rating_obj.rating.mu, 4),
-            "sigma_unscaled": round(player_rating_obj.rating.sigma, 4),
-            "games_played": player_rating_obj.games_played,
-            "games_rated": player_rating_obj.games_rated,
-            "confidence_percent": round(
-                player_rating_obj.get_confidence_percent(config.TRUESKILL_SIGMA), 1
-            ),
-            "avg_handicap_last_30": avg_hc,
-        })
-    ratings_list.sort(key=lambda x: x['mu_scaled'], reverse=True)
-
-    tmp_ratings = ratings_path + ".tmp"
-    with open(tmp_ratings, 'w') as f:
-        json.dump(ratings_list, f, indent=2)
-    os.rename(tmp_ratings, ratings_path)
-    logging.info(f"Player ratings saved to: {ratings_path}")
+        last_30_handicaps = [h.get("handicap", 100) for h in last_30]
+        avg_hc = (
+            round(sum(last_30_handicaps) / len(last_30_handicaps), 1)
+            if last_30_handicaps
+            else 100.0
+        )
+        ratings_list.append(
+            {
+                "name": player_name,
+                "mu_scaled": round(player_rating_obj.get_scaled_mu(), 2),
+                "sigma_scaled": round(
+                    player_rating_obj.rating.sigma
+                    * config.TRUESKILL_ELO_SCALING_FACTOR,
+                    2,
+                ),
+                "mu_unscaled": round(player_rating_obj.rating.mu, 4),
+                "sigma_unscaled": round(player_rating_obj.rating.sigma, 4),
+                "games_played": player_rating_obj.games_played,
+                "games_rated": player_rating_obj.games_rated,
+                "confidence_percent": round(
+                    player_rating_obj.get_confidence_percent(config.TRUESKILL_SIGMA), 1
+                ),
+                "avg_handicap_last_30": avg_hc,
+            }
+        )
+    ratings_list.sort(key=lambda x: x["mu_scaled"], reverse=True)
 
     # Build rating history
     serializable_history = [
@@ -502,17 +619,21 @@ def run_trueskill_from_registry(registry_games, data_dir=None):
         }
         for h in calculator.rating_history
     ]
-    history_data = {
-        "history": serializable_history,
-        "lan_events": lan_events or [],
-    }
-    tmp_history = history_path + ".tmp"
-    with open(tmp_history, 'w') as f:
-        json.dump(history_data, f)
-    os.rename(tmp_history, history_path)
-    logging.info(f"Rating history saved to: {history_path}")
 
-    return calculator.player_ratings, calculator.rating_history, lan_events, rating_deltas
+    # Save to SQLite database
+    from analyzer_lib import db as db_module
+
+    db_path = db_module.get_db_path(output_dir)
+    db_module.save_player_ratings(db_path, ratings_list)
+    db_module.save_rating_history(db_path, serializable_history, lan_events or [])
+    logging.info(f"Ratings and history saved to database: {db_path}")
+
+    return (
+        calculator.player_ratings,
+        calculator.rating_history,
+        lan_events,
+        rating_deltas,
+    )
 
 
 def main():
@@ -524,9 +645,12 @@ def main():
     if not processed_games:
         logging.error("No processed games in registry. Run main.py first.")
         return
-    logging.info(f"Running TrueSkill on {len(processed_games)} processed games from registry...")
+    logging.info(
+        f"Running TrueSkill on {len(processed_games)} processed games from registry..."
+    )
     run_trueskill_from_registry(processed_games, data_dir=config.DATA_DIR)
     logging.info("Done.")
+
 
 if __name__ == "__main__":
     main()

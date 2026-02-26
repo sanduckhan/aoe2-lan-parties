@@ -79,9 +79,9 @@ def list_replays() -> list:
         for obj in response.get("Contents", []):
             key = obj["Key"]
             # Extract sha256 from key like "replays/{sha256}.aoe2record"
-            filename = key[len(REPLAY_PREFIX):]
+            filename = key[len(REPLAY_PREFIX) :]
             if filename.endswith(".aoe2record"):
-                sha = filename[:-len(".aoe2record")]
+                sha = filename[: -len(".aoe2record")]
                 replays.append({"sha256": sha, "size": obj["Size"]})
 
         if response.get("IsTruncated"):

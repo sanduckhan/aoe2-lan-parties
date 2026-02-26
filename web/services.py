@@ -1,5 +1,4 @@
 import hashlib
-import json
 import logging
 import os
 import sys
@@ -11,45 +10,18 @@ sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "scripts"))
 
 import trueskill
-from analyzer_lib import config
+from analyzer_lib import config, db
 from handicap_recommender import recommended_handicap
 from team_balancer import find_balanced_teams, suggest_rebalances_data
 
 logger = logging.getLogger(__name__)
 
-RATINGS_PATH = os.path.join(config.DATA_DIR, "player_ratings.json")
-ANALYSIS_DATA_PATH = os.path.join(config.DATA_DIR, "analysis_data.json")
-RATING_HISTORY_PATH = os.path.join(config.DATA_DIR, "rating_history.json")
-GAME_REGISTRY_PATH = os.path.join(config.DATA_DIR, "game_registry.json")
-
-
-class MtimeCache:
-    """Cache that auto-reloads a JSON file when its mtime changes on disk."""
-
-    def __init__(self, path):
-        self._path = path
-        self._data = None
-        self._mtime = 0
-
-    def get(self):
-        try:
-            current_mtime = os.path.getmtime(self._path)
-        except FileNotFoundError:
-            return None
-        if self._data is None or current_mtime > self._mtime:
-            with open(self._path, "r") as f:
-                self._data = json.load(f)
-            self._mtime = current_mtime
-        return self._data
-
-
-_analysis_cache = MtimeCache(ANALYSIS_DATA_PATH)
-_ratings_cache = MtimeCache(RATINGS_PATH)
-_rating_history_cache = MtimeCache(RATING_HISTORY_PATH)
-_game_registry_cache = MtimeCache(GAME_REGISTRY_PATH)
-
 # Lazy singleton for IncrementalProcessor
 _processor = None
+
+
+def _get_db_path() -> str:
+    return db.get_db_path(config.DATA_DIR)
 
 
 def _get_ts_env() -> trueskill.TrueSkill:
@@ -60,9 +32,9 @@ def _get_ts_env() -> trueskill.TrueSkill:
 
 
 def load_ratings() -> List[Dict[str, Any]]:
-    data = _ratings_cache.get()
-    if data is None:
-        raise FileNotFoundError(f"Ratings file not found: {RATINGS_PATH}")
+    data = db.load_player_ratings(_get_db_path())
+    if not data:
+        raise FileNotFoundError("No player ratings found in database")
     return data
 
 
@@ -88,12 +60,20 @@ def _player_info(data: Dict[str, Any]) -> Dict[str, Any]:
 def get_players_for_api() -> Dict[str, Any]:
     ratings = load_ratings()
     ranked = sorted(
-        [r for r in ratings if r.get("games_rated", r["games_played"]) >= config.MIN_GAMES_FOR_RANKING],
+        [
+            r
+            for r in ratings
+            if r.get("games_rated", r["games_played"]) >= config.MIN_GAMES_FOR_RANKING
+        ],
         key=lambda r: r["mu_scaled"],
         reverse=True,
     )
     provisional = sorted(
-        [r for r in ratings if r.get("games_rated", r["games_played"]) < config.MIN_GAMES_FOR_RANKING],
+        [
+            r
+            for r in ratings
+            if r.get("games_rated", r["games_played"]) < config.MIN_GAMES_FOR_RANKING
+        ],
         key=lambda r: r["mu_scaled"],
         reverse=True,
     )
@@ -181,9 +161,7 @@ def _enrich_suggestion(
     }
 
 
-def generate_teams(
-    player_names: List[str], top_n: int = 3
-) -> Dict[str, Any]:
+def generate_teams(player_names: List[str], top_n: int = 3) -> Dict[str, Any]:
     ratings_data = _ratings_dict()
 
     valid = []
@@ -229,48 +207,54 @@ def rebalance_teams(
     player_ts_ratings = _build_ts_ratings(all_names, ratings_data)
 
     return suggest_rebalances_data(
-        team1, team2, weaker_team,
-        player_ts_ratings, ratings_data, ts_env, top_n=top_n,
+        team1,
+        team2,
+        weaker_team,
+        player_ts_ratings,
+        ratings_data,
+        ts_env,
+        top_n=top_n,
     )
 
 
-# --- New API service functions ---
-
-def _load_analysis_data() -> Dict[str, Any]:
-    data = _analysis_cache.get()
-    if data is None:
-        raise FileNotFoundError(f"Analysis data not found: {ANALYSIS_DATA_PATH}")
-    return data
+# --- API service functions ---
 
 
 def get_awards_for_api() -> Dict[str, Any]:
-    data = _load_analysis_data()
-    return data["awards"]
+    data = db.load_analysis_cache(_get_db_path(), "awards")
+    if data is None:
+        raise FileNotFoundError("No awards data found in database")
+    return data
 
 
 def get_games_for_api() -> Dict[str, Any]:
-    data = _load_analysis_data()
-    games = data["game_results"]
+    games = db.load_analysis_cache(_get_db_path(), "game_results")
+    if games is None:
+        raise FileNotFoundError("No game results found in database")
     formatted = []
     for g in games:
         winning_team_id = g.get("winning_team_id")
         teams_list = []
         for tid, players in g["teams"].items():
-            teams_list.append({
-                "team_id": tid,
-                "players": players,
-                "is_winner": (tid == winning_team_id),
-            })
-        formatted.append({
-            "filename": g["filename"],
-            "datetime": g["datetime"],
-            "duration_seconds": g["duration_seconds"],
-            "duration_display": str(timedelta(seconds=int(g["duration_seconds"]))),
-            "teams": teams_list,
-            "has_winner": winning_team_id is not None,
-            "sha256": g.get("sha256"),
-            "rating_changes": g.get("rating_changes"),
-        })
+            teams_list.append(
+                {
+                    "team_id": tid,
+                    "players": players,
+                    "is_winner": (tid == winning_team_id),
+                }
+            )
+        formatted.append(
+            {
+                "filename": g["filename"],
+                "datetime": g["datetime"],
+                "duration_seconds": g["duration_seconds"],
+                "duration_display": str(timedelta(seconds=int(g["duration_seconds"]))),
+                "teams": teams_list,
+                "has_winner": winning_team_id is not None,
+                "sha256": g.get("sha256"),
+                "rating_changes": g.get("rating_changes"),
+            }
+        )
     formatted.sort(key=lambda g: g["datetime"])
     for i, g in enumerate(formatted, 1):
         g["game_number"] = i
@@ -279,15 +263,8 @@ def get_games_for_api() -> Dict[str, Any]:
 
 def get_game_detail_for_api(sha256: str) -> Optional[Dict[str, Any]]:
     """Return full game detail from registry + rating changes from analysis data."""
-    registry_data = _game_registry_cache.get()
-    if registry_data is None:
-        raise FileNotFoundError(f"Game registry not found: {GAME_REGISTRY_PATH}")
-
-    entry = None
-    for g in registry_data.get("games", []):
-        if g.get("sha256") == sha256:
-            entry = g
-            break
+    registry = _get_registry()
+    entry = registry.get_game_by_sha256(sha256)
 
     if entry is None:
         return None
@@ -297,7 +274,9 @@ def get_game_detail_for_api(sha256: str) -> Optional[Dict[str, Any]]:
         "filename": entry.get("filename"),
         "datetime": entry.get("datetime"),
         "duration_seconds": entry.get("duration_seconds", 0),
-        "duration_display": str(timedelta(seconds=int(entry.get("duration_seconds", 0)))),
+        "duration_display": str(
+            timedelta(seconds=int(entry.get("duration_seconds", 0)))
+        ),
         "status": entry.get("status"),
         "winning_team_id": entry.get("winning_team_id"),
         "teams": {},
@@ -322,26 +301,31 @@ def get_game_detail_for_api(sha256: str) -> Optional[Dict[str, Any]]:
             ],
         }
 
+    # Get rating changes from analysis cache
     try:
-        analysis_data = _load_analysis_data()
-        for gr in analysis_data.get("game_results", []):
-            if gr.get("sha256") == sha256:
-                result["rating_changes"] = gr.get("rating_changes", {})
-                break
-    except FileNotFoundError:
+        game_results = db.load_analysis_cache(_get_db_path(), "game_results")
+        if game_results:
+            for gr in game_results:
+                if gr.get("sha256") == sha256:
+                    result["rating_changes"] = gr.get("rating_changes", {})
+                    break
+    except Exception:
         pass
 
     return result
 
 
 def get_stats_for_api() -> Dict[str, Any]:
-    data = _load_analysis_data()
-    return data["general_stats"]
+    data = db.load_analysis_cache(_get_db_path(), "general_stats")
+    if data is None:
+        raise FileNotFoundError("No stats data found in database")
+    return data
 
 
 def get_player_profile_for_api(name: str) -> Optional[Dict[str, Any]]:
-    data = _load_analysis_data()
-    profiles = data.get("player_profiles", {})
+    profiles = db.load_analysis_cache(_get_db_path(), "player_profiles")
+    if profiles is None:
+        return None
 
     # Try exact match, then case-insensitive
     profile = profiles.get(name)
@@ -354,10 +338,10 @@ def get_player_profile_for_api(name: str) -> Optional[Dict[str, Any]]:
     if profile is None:
         return None
 
-    # Make a copy to avoid mutating the cache
+    # Make a copy to avoid mutating cached data
     profile = dict(profile)
 
-    # Enrich with rating data from player_ratings.json
+    # Enrich with rating data
     try:
         ratings_data = _ratings_dict()
         canonical_name = profile["name"]
@@ -377,7 +361,9 @@ def get_player_profile_for_api(name: str) -> Optional[Dict[str, Any]]:
     # Compute trend from rating history
     try:
         history_data = get_rating_history_for_api()
-        player_history = [h for h in history_data["history"] if h["player_name"] == profile["name"]]
+        player_history = [
+            h for h in history_data["history"] if h["player_name"] == profile["name"]
+        ]
         if len(player_history) >= 2:
             latest = player_history[-1]["mu"]
             earlier_idx = max(0, len(player_history) - 6)
@@ -392,12 +378,9 @@ def get_player_profile_for_api(name: str) -> Optional[Dict[str, Any]]:
 
 
 def get_rating_history_for_api() -> Dict[str, Any]:
-    data = _rating_history_cache.get()
-    if data is None:
-        raise FileNotFoundError(f"Rating history not found: {RATING_HISTORY_PATH}")
-    # Support both old format (flat list) and new format (dict with history + lan_events)
-    if isinstance(data, list):
-        return {"history": data, "lan_events": []}
+    data = db.load_rating_history(_get_db_path())
+    if not data or (not data.get("history") and not data.get("lan_events")):
+        raise FileNotFoundError("No rating history found in database")
     return data
 
 
@@ -405,22 +388,19 @@ def get_rating_history_for_api() -> Dict[str, Any]:
 
 
 def get_lan_events_for_api() -> List[Dict[str, Any]]:
-    """Return LAN events from rating_history.json, formatted for the API."""
-    data = _rating_history_cache.get()
-    if data is None or isinstance(data, list):
-        return []
-    lan_events = data.get("lan_events", [])
+    """Return LAN events from the database, formatted for the API."""
+    events = db.load_lan_events(_get_db_path())
     result = []
-    for event in lan_events:
-        result.append({
-            "id": f"lan-{event['start_date']}",
-            "label": event["label"],
-            "start_date": event["start_date"],
-            "end_date": event["end_date"],
-            "num_games": event["num_games"],
-        })
-    # Sort by start_date descending (most recent first)
-    result.sort(key=lambda e: e["start_date"], reverse=True)
+    for event in events:
+        result.append(
+            {
+                "id": f"lan-{event['start_date']}",
+                "label": event["label"],
+                "start_date": event["start_date"],
+                "end_date": event["end_date"],
+                "num_games": event["num_games"],
+            }
+        )
     return result
 
 
@@ -437,15 +417,12 @@ def compute_event_awards(event_id: str) -> Optional[Dict[str, Any]]:
     start_date = event["start_date"]
     end_date = event["end_date"]
 
-    registry_data = _game_registry_cache.get()
-    if registry_data is None:
-        raise FileNotFoundError(f"Game registry not found: {GAME_REGISTRY_PATH}")
-
-    filtered_games = [
-        g for g in registry_data.get("games", [])
-        if g.get("status") in ("processed", "no_winner")
-        and start_date <= g.get("datetime", "")[:10] <= end_date
-    ]
+    registry = _get_registry()
+    filtered_games = registry.get_games_in_date_range(
+        status_list=["processed", "no_winner"],
+        date_from=start_date,
+        date_to=end_date,
+    )
     filtered_games.sort(key=lambda g: g.get("datetime", ""))
 
     player_stats, game_stats, _, _ = accumulate_stats_from_games(filtered_games)
@@ -471,6 +448,11 @@ def _get_processor():
     return _processor
 
 
+def _get_registry():
+    """Get the shared GameRegistry from the processor singleton."""
+    return _get_processor()._registry
+
+
 def process_upload(file_bytes: bytes, sha256: str) -> Dict[str, Any]:
     """Process an uploaded replay file end-to-end.
 
@@ -492,16 +474,8 @@ def get_replay_download(sha256: str) -> Optional[Tuple[bytes, str]]:
     Checks local disk first (source_path), then falls back to bucket storage.
     Returns (file_bytes, filename) or None if not found.
     """
-    registry_data = _game_registry_cache.get()
-    if registry_data is None:
-        return None
-
-    # Find the game entry by sha256
-    entry = None
-    for g in registry_data.get("games", []):
-        if g.get("sha256") == sha256:
-            entry = g
-            break
+    registry = _get_registry()
+    entry = registry.get_game_by_sha256(sha256)
 
     if entry is None:
         return None
@@ -511,7 +485,9 @@ def get_replay_download(sha256: str) -> Optional[Tuple[bytes, str]]:
     # Try local file first
     source_path = entry.get("source_path")
     if source_path:
-        full_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), source_path)
+        full_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), source_path
+        )
         if os.path.isfile(full_path):
             with open(full_path, "rb") as f:
                 return f.read(), filename
@@ -519,6 +495,7 @@ def get_replay_download(sha256: str) -> Optional[Tuple[bytes, str]]:
     # Fall back to bucket storage
     try:
         from server import storage
+
         file_bytes = storage.download_replay(sha256)
         return file_bytes, filename
     except Exception:

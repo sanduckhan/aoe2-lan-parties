@@ -1,31 +1,22 @@
-"""Display game-by-game results from analysis_data.json.
+"""Display game-by-game results from the database.
 
 Usage:
     python scripts/display_game_results.py
 """
 
-import json
 import os
 import sys
 from datetime import timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from analyzer_lib import config
-
-ANALYSIS_DATA_PATH = os.path.join(config.DATA_DIR, "analysis_data.json")
+from analyzer_lib import config, db
 
 
 def display_game_by_game_results():
-    if not os.path.isfile(ANALYSIS_DATA_PATH):
-        print(f"Error: {ANALYSIS_DATA_PATH} not found. Run main.py first.")
-        return
-
-    with open(ANALYSIS_DATA_PATH, "r") as f:
-        data = json.load(f)
-
-    games = data.get("game_results", [])
+    db_path = db.get_db_path(config.DATA_DIR)
+    games = db.load_analysis_cache(db_path, "game_results")
     if not games:
-        print("No game results found.")
+        print("No game results found. Run main.py first.")
         return
 
     print(f"--- Game by Game Results ({len(games)} games) ---\n")

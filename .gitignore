@@ -18,6 +18,9 @@ recorded_games/*
 *.log
 
 # Generated data files (produced by the processing pipeline)
+aoe2_data.db
+aoe2_data.db-wal
+aoe2_data.db-shm
 analysis_data.json
 player_ratings.json
 rating_history.json

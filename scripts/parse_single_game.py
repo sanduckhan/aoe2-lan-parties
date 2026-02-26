@@ -3,10 +3,13 @@ import os
 import argparse
 from mgz.model import parse_match, serialize
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Parse a single Age of Empires II recorded game file and save its content to a JSON file.')
-    parser.add_argument('input_file', help='Path to the .aoe2record input file.')
-    parser.add_argument('output_file', help='Path to the .json output file.')
+    parser = argparse.ArgumentParser(
+        description="Parse a single Age of Empires II recorded game file and save its content to a JSON file."
+    )
+    parser.add_argument("input_file", help="Path to the .aoe2record input file.")
+    parser.add_argument("output_file", help="Path to the .json output file.")
 
     args = parser.parse_args()
 
@@ -29,14 +32,14 @@ def main():
 
     print(f"Processing: {input_path}")
     try:
-        with open(input_path, 'rb') as f:
+        with open(input_path, "rb") as f:
             match_data = parse_match(f)
-        
+
         serialized_data = serialize(match_data)
-        
-        with open(output_path, 'w') as outfile:
+
+        with open(output_path, "w") as outfile:
             json.dump(serialized_data, outfile, indent=2)
-        
+
         print(f"Successfully processed and saved to: {output_path}")
 
     except FileNotFoundError:
@@ -44,5 +47,6 @@ def main():
     except Exception as e:
         print(f"Error processing file {input_path}: {e}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

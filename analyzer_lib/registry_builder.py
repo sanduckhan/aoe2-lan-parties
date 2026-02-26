@@ -171,9 +171,7 @@ def replay_to_registry_entry(file_bytes, sha256, filename_hint="", source_path=N
 
     # --- Fingerprint ---
     if entry["datetime"] and teams_dict:
-        entry["fingerprint"] = compute_game_fingerprint(
-            entry["datetime"], teams_dict
-        )
+        entry["fingerprint"] = compute_game_fingerprint(entry["datetime"], teams_dict)
 
     # --- Extract action-based deltas ---
     try:

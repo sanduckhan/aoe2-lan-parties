@@ -136,7 +136,9 @@ def auto_detect_or_pick() -> str | None:
         root.resizable(False, False)
         chosen = [None]
 
-        tk.Label(root, text="Multiple savegame folders found.\nSelect one:").pack(pady=10)
+        tk.Label(root, text="Multiple savegame folders found.\nSelect one:").pack(
+            pady=10
+        )
         lb = tk.Listbox(root, selectmode=tk.SINGLE, width=60)
         for f in folders:
             lb.insert(tk.END, f)
@@ -301,10 +303,7 @@ class UploaderDaemon:
     def _scan_folder(self) -> list:
         """Return list of .aoe2record file paths in the savegame folder."""
         try:
-            return sorted(
-                str(p)
-                for p in Path(self.savegame_path).glob("*.aoe2record")
-            )
+            return sorted(str(p) for p in Path(self.savegame_path).glob("*.aoe2record"))
         except OSError:
             return []
 
@@ -361,9 +360,13 @@ class UploaderDaemon:
             for path in sorted(new_files):
                 if self.stop_event.is_set():
                     break
-                logger.info("NEW    %s — waiting for write to finish...", os.path.basename(path))
+                logger.info(
+                    "NEW    %s — waiting for write to finish...", os.path.basename(path)
+                )
                 if not file_is_stable(path):
-                    logger.info("SKIP   %s — file still changing", os.path.basename(path))
+                    logger.info(
+                        "SKIP   %s — file still changing", os.path.basename(path)
+                    )
                     continue
                 if not self._process_file(path):
                     file_hash = sha256_file(path)
@@ -390,9 +393,16 @@ class UploaderDaemon:
                 continue
             attempts += 1
             if attempts > MAX_RETRIES:
-                logger.info("GIVE UP  %s after %d retries", os.path.basename(path), MAX_RETRIES)
+                logger.info(
+                    "GIVE UP  %s after %d retries", os.path.basename(path), MAX_RETRIES
+                )
                 continue
-            logger.info("RETRY  %s (attempt %d/%d)", os.path.basename(path), attempts, MAX_RETRIES)
+            logger.info(
+                "RETRY  %s (attempt %d/%d)",
+                os.path.basename(path),
+                attempts,
+                MAX_RETRIES,
+            )
             if not self._try_upload(path, file_hash):
                 still_pending.append((path, file_hash, attempts))
 
@@ -420,7 +430,9 @@ class UploaderDaemon:
         win.title(f"{APP_NAME} — Log")
         win.geometry("650x400")
 
-        text = scrolledtext.ScrolledText(win, state="disabled", wrap=tk.WORD, font=("Consolas", 9))
+        text = scrolledtext.ScrolledText(
+            win, state="disabled", wrap=tk.WORD, font=("Consolas", 9)
+        )
         text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # Populate with existing entries
@@ -464,16 +476,22 @@ class UploaderDaemon:
 
         cfg = load_config()
 
-        tk.Label(win, text="Savegame folder:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        tk.Label(win, text="Savegame folder:").grid(
+            row=0, column=0, padx=10, pady=10, sticky="w"
+        )
         path_var = tk.StringVar(value=self.savegame_path)
-        tk.Entry(win, textvariable=path_var, width=45).grid(row=0, column=1, padx=5, pady=10)
+        tk.Entry(win, textvariable=path_var, width=45).grid(
+            row=0, column=1, padx=5, pady=10
+        )
 
         def browse():
             p = filedialog.askdirectory(title="Select savegame folder")
             if p:
                 path_var.set(p)
 
-        tk.Button(win, text="Browse", command=browse).grid(row=0, column=2, padx=5, pady=10)
+        tk.Button(win, text="Browse", command=browse).grid(
+            row=0, column=2, padx=5, pady=10
+        )
 
         auto_start_var = tk.BooleanVar(value=cfg.get("auto_start", True))
         tk.Checkbutton(win, text="Start with Windows", variable=auto_start_var).grid(
@@ -538,7 +556,14 @@ class UploaderDaemon:
 # Windows auto-start helpers
 # ---------------------------------------------------------------------------
 
-STARTUP_DIR = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+STARTUP_DIR = (
+    Path(os.environ.get("APPDATA", ""))
+    / "Microsoft"
+    / "Windows"
+    / "Start Menu"
+    / "Programs"
+    / "Startup"
+)
 
 
 def _get_exe_path() -> str:
@@ -560,10 +585,10 @@ def _create_startup_shortcut():
         target = _get_exe_path()
         link = str(_shortcut_path())
         ps_script = (
-            f'$ws = New-Object -ComObject WScript.Shell; '
+            f"$ws = New-Object -ComObject WScript.Shell; "
             f'$sc = $ws.CreateShortcut("{link}"); '
             f'$sc.TargetPath = "{target}"; '
-            f'$sc.Save()'
+            f"$sc.Save()"
         )
         subprocess.run(
             ["powershell", "-Command", ps_script],

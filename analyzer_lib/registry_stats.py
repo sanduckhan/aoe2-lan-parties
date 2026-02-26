@@ -14,25 +14,27 @@ from .analyze_games import _calculate_losing_streaks
 
 def make_empty_player_stats():
     """Return a defaultdict factory for per-player stats."""
-    return defaultdict(lambda: {
-        "games_played": 0,
-        "games_for_win_rate": 0,
-        "wins": 0,
-        "total_playtime_seconds": 0,
-        "total_eapm": 0,
-        "games_with_eapm": 0,
-        "civs_played": defaultdict(int),
-        "civ_wins": defaultdict(int),
-        "civ_losses": defaultdict(int),
-        "civ_games_for_win_rate": defaultdict(int),
-        "units_created": defaultdict(int),
-        "total_units_created": 0,
-        "market_transactions": 0,
-        "total_resource_units_traded": 0,
-        "wall_segments_built": 0,
-        "buildings_deleted": 0,
-        "crucial_researched": defaultdict(int),
-    })
+    return defaultdict(
+        lambda: {
+            "games_played": 0,
+            "games_for_win_rate": 0,
+            "wins": 0,
+            "total_playtime_seconds": 0,
+            "total_eapm": 0,
+            "games_with_eapm": 0,
+            "civs_played": defaultdict(int),
+            "civ_wins": defaultdict(int),
+            "civ_losses": defaultdict(int),
+            "civ_games_for_win_rate": defaultdict(int),
+            "units_created": defaultdict(int),
+            "total_units_created": 0,
+            "market_transactions": 0,
+            "total_resource_units_traded": 0,
+            "wall_segments_built": 0,
+            "buildings_deleted": 0,
+            "crucial_researched": defaultdict(int),
+        }
+    )
 
 
 def make_empty_game_stats():
@@ -43,13 +45,9 @@ def make_empty_game_stats():
         "longest_game": {"duration_seconds": 0, "file": ""},
         "overall_civ_picks": defaultdict(int),
         "total_units_created_overall": 0,
-        "team_matchups": defaultdict(
-            lambda: {"rosters": (), "wins_A": 0, "wins_B": 0}
-        ),
+        "team_matchups": defaultdict(lambda: {"rosters": (), "wins_A": 0, "wins_B": 0}),
         "awards": {
-            "favorite_unit_fanatic": defaultdict(
-                lambda: {"unit": "N/A", "count": 0}
-            ),
+            "favorite_unit_fanatic": defaultdict(lambda: {"unit": "N/A", "count": 0}),
             "bitter_salt_baron": {"player": None, "streak": 0},
             "market_mogul": {"player": None, "transactions": 0},
         },
@@ -72,9 +70,7 @@ def accumulate_stats_from_games(games):
     player_stats = make_empty_player_stats()
     game_stats = make_empty_game_stats()
     game_results = []
-    head_to_head = defaultdict(
-        lambda: defaultdict(lambda: {"wins": 0, "losses": 0})
-    )
+    head_to_head = defaultdict(lambda: defaultdict(lambda: {"wins": 0, "losses": 0}))
     player_game_chronology = defaultdict(list)
 
     for game in games:
@@ -127,11 +123,13 @@ def accumulate_stats_from_games(games):
                 elif has_winner:
                     player_stats[name]["civ_losses"][civ] += 1
 
-                player_game_chronology[name].append({
-                    "won": is_winner,
-                    "has_winner": has_winner,
-                    "timestamp": game.get("datetime", ""),
-                })
+                player_game_chronology[name].append(
+                    {
+                        "won": is_winner,
+                        "has_winner": has_winner,
+                        "timestamp": game.get("datetime", ""),
+                    }
+                )
 
         # --- Action-based stats from player_deltas ---
         player_deltas = game.get("player_deltas", {})
@@ -172,14 +170,16 @@ def accumulate_stats_from_games(games):
                 }
                 for p in players
             ]
-        game_results.append({
-            "filename": filename,
-            "datetime": game.get("datetime", ""),
-            "duration_seconds": duration,
-            "winning_team_id": winning_tid,
-            "teams": game_result_teams,
-            "sha256": game.get("sha256", ""),
-        })
+        game_results.append(
+            {
+                "filename": filename,
+                "datetime": game.get("datetime", ""),
+                "duration_seconds": duration,
+                "winning_team_id": winning_tid,
+                "teams": game_result_teams,
+                "sha256": game.get("sha256", ""),
+            }
+        )
 
         # --- Head-to-head ---
         if has_winner and all_winners and all_losers:
@@ -200,9 +200,7 @@ def accumulate_stats_from_games(games):
             team_a_id = sorted_tids[0]
 
             if not game_stats["team_matchups"][matchup_key]["rosters"]:
-                game_stats["team_matchups"][matchup_key][
-                    "rosters"
-                ] = canonical_rosters
+                game_stats["team_matchups"][matchup_key]["rosters"] = canonical_rosters
 
             if winning_tid == team_a_id:
                 game_stats["team_matchups"][matchup_key]["wins_A"] += 1

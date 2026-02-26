@@ -119,9 +119,7 @@ def main():
     seen_fingerprints = set()
 
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        futures = {
-            executor.submit(_process_single_file, fp): fp for fp in file_paths
-        }
+        futures = {executor.submit(_process_single_file, fp): fp for fp in file_paths}
         for i, future in enumerate(as_completed(futures), 1):
             if i % 50 == 0 or i == len(file_paths):
                 logger.info(f"Parsed {i}/{len(file_paths)}...")

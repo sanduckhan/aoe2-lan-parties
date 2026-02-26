@@ -49,7 +49,7 @@ def api_players():
     try:
         return jsonify(services.get_players_for_api())
     except FileNotFoundError:
-        return jsonify({"error": "player_ratings.json not found. Run calculate_trueskill.py first."}), 404
+        return jsonify({"error": "No player ratings found. Run main.py first."}), 404
 
 
 @app.route("/api/teams/generate", methods=["POST"])
@@ -111,11 +111,14 @@ def api_awards():
                 return jsonify({"error": "LAN event not found"}), 404
             return jsonify(awards)
         except FileNotFoundError:
-            return jsonify({"error": "game_registry.json not found"}), 404
+            return (
+                jsonify({"error": "Game registry not found. Run main.py first."}),
+                404,
+            )
     try:
         return jsonify(services.get_awards_for_api())
     except FileNotFoundError:
-        return jsonify({"error": "analysis_data.json not found. Run main.py first."}), 404
+        return jsonify({"error": "No analysis data found. Run main.py first."}), 404
 
 
 @app.route("/api/games")
@@ -123,7 +126,7 @@ def api_games():
     try:
         return jsonify(services.get_games_for_api())
     except FileNotFoundError:
-        return jsonify({"error": "analysis_data.json not found. Run main.py first."}), 404
+        return jsonify({"error": "No analysis data found. Run main.py first."}), 404
 
 
 @app.route("/api/games/<sha256>/detail")
@@ -134,7 +137,7 @@ def api_game_detail(sha256):
             return jsonify({"error": "Game not found"}), 404
         return jsonify(detail)
     except FileNotFoundError:
-        return jsonify({"error": "game_registry.json not found"}), 404
+        return jsonify({"error": "Game registry not found. Run main.py first."}), 404
 
 
 @app.route("/api/games/<sha256>/download")
@@ -155,7 +158,7 @@ def api_stats():
     try:
         return jsonify(services.get_stats_for_api())
     except FileNotFoundError:
-        return jsonify({"error": "analysis_data.json not found. Run main.py first."}), 404
+        return jsonify({"error": "No analysis data found. Run main.py first."}), 404
 
 
 @app.route("/api/player/<name>")
@@ -166,7 +169,7 @@ def api_player_profile(name):
             return jsonify({"error": f"Player '{name}' not found"}), 404
         return jsonify(profile)
     except FileNotFoundError:
-        return jsonify({"error": "analysis_data.json not found. Run main.py first."}), 404
+        return jsonify({"error": "No analysis data found. Run main.py first."}), 404
 
 
 @app.route("/api/rating-history")
@@ -174,7 +177,7 @@ def api_rating_history():
     try:
         return jsonify(services.get_rating_history_for_api())
     except FileNotFoundError:
-        return jsonify({"error": "rating_history.json not found. Run calculate_trueskill.py first."}), 404
+        return jsonify({"error": "No rating history found. Run main.py first."}), 404
 
 
 # --- Write endpoints (API key required) ---
@@ -197,7 +200,10 @@ def api_upload():
     if "error" in result:
         return jsonify(result), 400
     if result.get("status") == "duplicate":
-        return jsonify({"status": "duplicate", "message": "Game already processed"}), 409
+        return (
+            jsonify({"status": "duplicate", "message": "Game already processed"}),
+            409,
+        )
     return jsonify(result), 200
 
 
