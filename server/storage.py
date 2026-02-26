@@ -19,15 +19,15 @@ def _get_client():
     """Lazily initialize and return the S3 client and bucket name."""
     global _s3_client, _bucket_name
     if _s3_client is None:
-        endpoint = os.environ.get("BUCKET_ENDPOINT", "")
-        access_key = os.environ.get("BUCKET_ACCESS_KEY_ID", "")
-        secret_key = os.environ.get("BUCKET_SECRET_ACCESS_KEY", "")
-        _bucket_name = os.environ.get("BUCKET_NAME", "")
+        endpoint = os.environ.get("AWS_ENDPOINT_URL", "")
+        access_key = os.environ.get("AWS_ACCESS_KEY_ID", "")
+        secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+        _bucket_name = os.environ.get("AWS_S3_BUCKET_NAME", "")
 
         if not all([endpoint, access_key, secret_key, _bucket_name]):
             raise RuntimeError(
-                "Missing bucket configuration. Set BUCKET_ENDPOINT, "
-                "BUCKET_ACCESS_KEY_ID, BUCKET_SECRET_ACCESS_KEY, and BUCKET_NAME."
+                "Missing bucket configuration. Set AWS_ENDPOINT_URL, "
+                "AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_S3_BUCKET_NAME."
             )
 
         _s3_client = boto3.client(

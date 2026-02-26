@@ -2,13 +2,27 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir flask trueskill gunicorn
+# Install git for mgz fork
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
-COPY analyzer_lib/__init__.py analyzer_lib/
-COPY analyzer_lib/config.py analyzer_lib/
-COPY scripts/team_balancer.py scripts/
-COPY scripts/handicap_recommender.py scripts/
+# Install Python dependencies
+RUN pip install --no-cache-dir \
+    flask \
+    trueskill \
+    gunicorn \
+    boto3 \
+    pandas \
+    git+https://github.com/sanduckhan/aoc-mgz.git@feat/expose-handicap
+
+# Copy application code
+COPY analyzer_lib/ analyzer_lib/
+COPY scripts/ scripts/
 COPY web/ web/
-COPY run_web.py player_ratings.json analysis_data.json rating_history.json ./
+COPY server/ server/
+COPY run_web.py ./
 
-CMD gunicorn --bind 0.0.0.0:$PORT web.app:app
+# Data directory (Railway persistent volume mount point)
+ENV DATA_DIR=/app/data
+
+# Gunicorn with extended timeout for rebuild endpoint
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 600 web.app:app

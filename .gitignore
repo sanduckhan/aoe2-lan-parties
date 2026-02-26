@@ -9,6 +9,9 @@ __pycache__/
 # OS-specific
 .DS_Store
 
+# Environment variables (never commit real credentials)
+.env
+
 # Project specific
 recorded_games/*
 !recorded_games/.gitkeep

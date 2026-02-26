@@ -47,6 +47,8 @@ const state = {
 // ---- Tab switching & hash routing ----
 let awardsFetched = false;
 let historyFetched = false;
+let lanEventsFetched = false;
+let lanEventsData = [];
 
 const VALID_TABS = ['ratings', 'awards', 'history', 'generator', 'game'];
 
@@ -81,6 +83,7 @@ function switchTab(tabId) {
     if (tabId === 'awards' && !awardsFetched) {
         awardsFetched = true;
         fetchAwards();
+        fetchLanEvents();
     }
     if (tabId === 'history' && !historyFetched) {
         historyFetched = true;
@@ -343,22 +346,79 @@ const AWARD_DEFS = {
     jittery_fingers: { title: "Jittery Caffeinated Fingers", icon: "\u26A1", statLabel: "avg eAPM", valueKey: "avg_eapm" },
 };
 
-async function fetchAwards() {
+async function fetchAwards(eventId) {
+    const grid = document.getElementById('awards-grid');
+    const loading = document.getElementById('awards-loading');
+    const content = document.getElementById('awards-content');
+
+    // If already showing content, show inline loading in the grid
+    if (content.style.display !== 'none') {
+        grid.innerHTML = '<div class="loading-text">Unveiling the legends...</div>';
+    }
+
     try {
-        const res = await fetch('/api/awards');
+        const url = eventId ? `/api/awards?event_id=${encodeURIComponent(eventId)}` : '/api/awards';
+        const res = await fetch(url);
         const data = await res.json();
         if (data.error) {
-            document.getElementById('awards-loading').innerHTML =
-                `<div class="loading-text">${data.error}</div>`;
+            if (content.style.display === 'none') {
+                loading.innerHTML = `<div class="loading-text">${data.error}</div>`;
+            } else {
+                grid.innerHTML = `<div class="loading-text">${data.error}</div>`;
+            }
             return;
         }
         renderAwards(data);
-        document.getElementById('awards-loading').style.display = 'none';
-        document.getElementById('awards-content').style.display = '';
+        loading.style.display = 'none';
+        content.style.display = '';
     } catch (err) {
-        document.getElementById('awards-loading').innerHTML =
-            '<div class="loading-text">Failed to unveil the legends.</div>';
+        if (content.style.display === 'none') {
+            loading.innerHTML = '<div class="loading-text">Failed to unveil the legends.</div>';
+        } else {
+            grid.innerHTML = '<div class="loading-text">Failed to unveil the legends.</div>';
+        }
         console.error(err);
+    }
+}
+
+async function fetchLanEvents() {
+    if (lanEventsFetched) return;
+    lanEventsFetched = true;
+    try {
+        const res = await fetch('/api/lan-events');
+        lanEventsData = await res.json();
+        const selector = document.getElementById('award-event-selector');
+        lanEventsData.forEach(event => {
+            const opt = document.createElement('option');
+            opt.value = event.id;
+            opt.textContent = event.label;
+            selector.appendChild(opt);
+        });
+        selector.addEventListener('change', () => {
+            const eventId = selector.value;
+            updateEventInfo(eventId);
+            fetchAwards(eventId || undefined);
+        });
+    } catch (err) {
+        console.error('Failed to fetch LAN events:', err);
+    }
+}
+
+function updateEventInfo(eventId) {
+    const infoEl = document.getElementById('event-info');
+    if (!eventId) {
+        infoEl.textContent = '';
+        return;
+    }
+    const event = lanEventsData.find(e => e.id === eventId);
+    if (event) {
+        const start = new Date(event.start_date + 'T00:00:00');
+        const end = new Date(event.end_date + 'T00:00:00');
+        const fmt = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        const dateRange = event.start_date === event.end_date
+            ? fmt(start)
+            : `${fmt(start)} \u2013 ${fmt(end)}`;
+        infoEl.textContent = `${event.num_games} games, ${dateRange}`;
     }
 }
 

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()  # Load .env file if present (local dev only)
+
 from web.app import app
 
 if __name__ == "__main__":

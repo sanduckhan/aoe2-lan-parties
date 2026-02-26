@@ -1455,6 +1455,51 @@ button:hover {
 /* =====================
    AWARDS TAB
    ===================== */
+.event-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    font-family: 'Cormorant Garamond', serif;
+}
+
+.event-selector label {
+    font-family: 'Cinzel', serif;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gold-dim);
+}
+
+.event-selector select {
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid var(--gold-dark);
+    border-radius: 4px;
+    padding: 0.4rem 0.75rem;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 0.95rem;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.event-selector select:hover,
+.event-selector select:focus {
+    border-color: var(--gold);
+}
+
+.event-selector select option {
+    background: var(--bg-card);
+    color: var(--text);
+}
+
+.event-info {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    font-style: italic;
+}
+
 .awards-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
