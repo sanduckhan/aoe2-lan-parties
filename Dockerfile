@@ -24,5 +24,6 @@ COPY run_web.py ./
 # Data directory (Railway persistent volume mount point)
 ENV DATA_DIR=/app/data
 
-# Gunicorn with extended timeout for rebuild endpoint
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 600 web.app:app
+# One-time migration from JSON to SQLite (skips gracefully if no JSON files or DB already exists)
+# TODO: Remove these 2 lines after first successful deploy
+CMD python scripts/migrate_to_sqlite.py; gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 600 web.app:app
