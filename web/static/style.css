@@ -1797,6 +1797,24 @@ button:hover {
     transform: translateY(-1px);
 }
 
+.btn-chronicle-download {
+    color: var(--gold);
+    border: 1px solid var(--border);
+    padding: 0.3rem 0.6rem;
+    font-size: 0.85rem;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-block;
+}
+
+.btn-chronicle-download:hover {
+    border-color: var(--gold);
+    color: var(--gold-bright);
+    transform: translateY(-1px);
+}
+
 .streak-badge {
     font-family: var(--font-display);
     font-size: 0.6rem;
@@ -1817,6 +1835,24 @@ button:hover {
     color: var(--red-bright);
     border: 1px solid var(--red);
     background: rgba(184, 58, 42, 0.12);
+}
+
+.rating-delta {
+    font-family: var(--font-display);
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-left: 0.2rem;
+    vertical-align: middle;
+    opacity: 0.8;
+}
+
+.rating-delta.rating-up {
+    color: var(--green-bright);
+}
+
+.rating-delta.rating-down {
+    color: var(--red-bright);
 }
 
 /* =====================

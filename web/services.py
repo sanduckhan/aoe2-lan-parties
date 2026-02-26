@@ -269,6 +269,8 @@ def get_games_for_api() -> Dict[str, Any]:
             "duration_display": str(timedelta(seconds=int(g["duration_seconds"]))),
             "teams": teams_list,
             "has_winner": winning_team_id is not None,
+            "sha256": g.get("sha256"),
+            "rating_changes": g.get("rating_changes"),
         })
     formatted.sort(key=lambda g: g["datetime"], reverse=True)
     return {"games": formatted, "total": len(formatted)}
@@ -366,185 +368,29 @@ def get_lan_events_for_api() -> List[Dict[str, Any]]:
 
 def compute_event_awards(event_id: str) -> Optional[Dict[str, Any]]:
     """Compute awards scoped to a specific LAN event by filtering registry data."""
-    from analyzer_lib.analyze_games import _calculate_losing_streaks
+    from analyzer_lib.registry_stats import accumulate_stats_from_games
     from analyzer_lib.report_generator import compute_all_awards
 
-    # Find the matching event
     events = get_lan_events_for_api()
-    event = None
-    for e in events:
-        if e["id"] == event_id:
-            event = e
-            break
+    event = next((e for e in events if e["id"] == event_id), None)
     if event is None:
         return None
 
     start_date = event["start_date"]
     end_date = event["end_date"]
 
-    # Load game registry
     registry_data = _game_registry_cache.get()
     if registry_data is None:
         raise FileNotFoundError(f"Game registry not found: {GAME_REGISTRY_PATH}")
-    all_games = registry_data.get("games", [])
 
-    # Filter to games within event date range with valid status
     filtered_games = [
-        g for g in all_games
+        g for g in registry_data.get("games", [])
         if g.get("status") in ("processed", "no_winner")
-        and g.get("datetime", "")[:10] >= start_date
-        and g.get("datetime", "")[:10] <= end_date
+        and start_date <= g.get("datetime", "")[:10] <= end_date
     ]
     filtered_games.sort(key=lambda g: g.get("datetime", ""))
 
-    # Build player_stats and game_stats (mirrors rebuild_analysis_from_registry)
-    player_stats = defaultdict(lambda: {
-        "games_played": 0,
-        "games_for_win_rate": 0,
-        "wins": 0,
-        "total_playtime_seconds": 0,
-        "total_eapm": 0,
-        "games_with_eapm": 0,
-        "civs_played": defaultdict(int),
-        "civ_wins": defaultdict(int),
-        "civ_losses": defaultdict(int),
-        "civ_games_for_win_rate": defaultdict(int),
-        "units_created": defaultdict(int),
-        "total_units_created": 0,
-        "market_transactions": 0,
-        "total_resource_units_traded": 0,
-        "wall_segments_built": 0,
-        "buildings_deleted": 0,
-        "crucial_researched": defaultdict(int),
-    })
-
-    game_stats = {
-        "total_games": 0,
-        "total_duration_seconds": 0,
-        "longest_game": {"duration_seconds": 0, "file": ""},
-        "overall_civ_picks": defaultdict(int),
-        "total_units_created_overall": 0,
-        "team_matchups": defaultdict(
-            lambda: {"rosters": (), "wins_A": 0, "wins_B": 0}
-        ),
-        "awards": {
-            "favorite_unit_fanatic": defaultdict(
-                lambda: {"unit": "N/A", "count": 0}
-            ),
-            "bitter_salt_baron": {"player": None, "streak": 0},
-            "market_mogul": {"player": None, "transactions": 0},
-        },
-    }
-
-    player_game_chronology = defaultdict(list)
-
-    for game in filtered_games:
-        filename = game.get("filename", "")
-        duration = game.get("duration_seconds", 0)
-        teams = game.get("teams", {})
-        winning_tid = game.get("winning_team_id")
-        has_winner = winning_tid is not None
-
-        # General game stats
-        game_stats["total_games"] += 1
-        game_stats["total_duration_seconds"] += duration
-        if duration > game_stats["longest_game"]["duration_seconds"]:
-            game_stats["longest_game"]["duration_seconds"] = duration
-            game_stats["longest_game"]["file"] = filename
-
-        # Per-player core stats from teams metadata
-        all_winners = set()
-        all_losers = set()
-
-        for tid, players in teams.items():
-            for p_info in players:
-                name = p_info["name"]
-                civ = p_info.get("civ", "Unknown")
-                is_winner = p_info.get("winner", False)
-                eapm = p_info.get("eapm")
-
-                player_stats[name]["games_played"] += 1
-                if has_winner:
-                    player_stats[name]["games_for_win_rate"] += 1
-                if is_winner:
-                    player_stats[name]["wins"] += 1
-                    all_winners.add(name)
-                elif has_winner:
-                    all_losers.add(name)
-
-                player_stats[name]["total_playtime_seconds"] += duration
-
-                if eapm:
-                    player_stats[name]["total_eapm"] += eapm
-                    player_stats[name]["games_with_eapm"] += 1
-
-                player_stats[name]["civs_played"][civ] += 1
-                game_stats["overall_civ_picks"][civ] += 1
-                if has_winner:
-                    player_stats[name]["civ_games_for_win_rate"][civ] += 1
-
-                if is_winner:
-                    player_stats[name]["civ_wins"][civ] += 1
-                elif has_winner:
-                    player_stats[name]["civ_losses"][civ] += 1
-
-                player_game_chronology[name].append({
-                    "won": is_winner,
-                    "has_winner": has_winner,
-                    "timestamp": game.get("datetime", ""),
-                })
-
-        # Action-based stats from player_deltas
-        player_deltas = game.get("player_deltas", {})
-        for name, deltas in player_deltas.items():
-            for unit, count in deltas.get("units_created", {}).items():
-                player_stats[name]["units_created"][unit] += count
-            player_stats[name]["total_units_created"] += deltas.get(
-                "total_units_created", 0
-            )
-            player_stats[name]["market_transactions"] += deltas.get(
-                "market_transactions", 0
-            )
-            player_stats[name]["total_resource_units_traded"] += deltas.get(
-                "total_resource_units_traded", 0
-            )
-            player_stats[name]["wall_segments_built"] += deltas.get(
-                "wall_segments_built", 0
-            )
-            player_stats[name]["buildings_deleted"] += deltas.get(
-                "buildings_deleted", 0
-            )
-            for tech, val in deltas.get("crucial_researched", {}).items():
-                player_stats[name]["crucial_researched"][tech] += val
-
-        game_level_deltas = game.get("game_level_deltas", {})
-        game_stats["total_units_created_overall"] += game_level_deltas.get(
-            "total_units_created_overall", 0
-        )
-
-        # Team matchup stats
-        if has_winner and len(teams) == 2:
-            team_rosters = []
-            for tid in sorted(teams.keys()):
-                roster = tuple(sorted(p["name"] for p in teams[tid]))
-                team_rosters.append(roster)
-            canonical_rosters = tuple(team_rosters)
-            matchup_key = str(canonical_rosters)
-
-            sorted_tids = sorted(teams.keys())
-            team_a_id = sorted_tids[0]
-
-            if not game_stats["team_matchups"][matchup_key]["rosters"]:
-                game_stats["team_matchups"][matchup_key]["rosters"] = canonical_rosters
-
-            if winning_tid == team_a_id:
-                game_stats["team_matchups"][matchup_key]["wins_A"] += 1
-            else:
-                game_stats["team_matchups"][matchup_key]["wins_B"] += 1
-
-    # Calculate losing streaks
-    _calculate_losing_streaks(player_game_chronology, player_stats)
-
+    player_stats, game_stats, _, _ = accumulate_stats_from_games(filtered_games)
     return compute_all_awards(player_stats, game_stats)
 
 
@@ -580,6 +426,45 @@ def process_upload(file_bytes: bytes, sha256: str) -> Dict[str, Any]:
 
     processor = _get_processor()
     return processor.process_new_replay(file_bytes, sha256)
+
+
+def get_replay_download(sha256: str) -> Optional[Tuple[bytes, str]]:
+    """Get replay file bytes and filename for download.
+
+    Checks local disk first (source_path), then falls back to bucket storage.
+    Returns (file_bytes, filename) or None if not found.
+    """
+    registry_data = _game_registry_cache.get()
+    if registry_data is None:
+        return None
+
+    # Find the game entry by sha256
+    entry = None
+    for g in registry_data.get("games", []):
+        if g.get("sha256") == sha256:
+            entry = g
+            break
+
+    if entry is None:
+        return None
+
+    filename = entry.get("filename", f"{sha256[:12]}.aoe2record")
+
+    # Try local file first
+    source_path = entry.get("source_path")
+    if source_path:
+        full_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), source_path)
+        if os.path.isfile(full_path):
+            with open(full_path, "rb") as f:
+                return f.read(), filename
+
+    # Fall back to bucket storage
+    try:
+        from server import storage
+        file_bytes = storage.download_replay(sha256)
+        return file_bytes, filename
+    except Exception:
+        return None
 
 
 def trigger_rebuild() -> Dict[str, Any]:

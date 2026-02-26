@@ -13,13 +13,10 @@ Usage:
 
 import argparse
 import hashlib
-import io
 import logging
 import os
 import sys
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
 
 # Ensure project root and scripts are importable
 _SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -28,13 +25,11 @@ sys.path.insert(0, _PROJECT_ROOT)
 sys.path.insert(0, os.path.join(_PROJECT_ROOT, "scripts"))
 
 from analyzer_lib import config
-from analyzer_lib.analyze_games import extract_single_game_deltas
-from analyzer_lib.replay_parser import get_datetime_from_filename
+from analyzer_lib.registry_builder import replay_to_registry_entry
 from calculate_trueskill import run_trueskill_from_registry
 
 from server.processing import (
     GameRegistry,
-    compute_game_fingerprint,
     rebuild_analysis_from_registry,
 )
 
@@ -45,7 +40,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 REPLAY_EXTENSIONS = (".aoe2record", ".mgz", ".mgx")
-MIN_GAME_DURATION_SECONDS = 300
 
 
 def _find_replay_files(replay_dir):
@@ -63,137 +57,11 @@ def _process_single_file(file_path):
 
     Returns (entry_dict, file_bytes) tuple. file_bytes is needed for bucket upload.
     """
-    from mgz.model import parse_match
-
     filename = os.path.basename(file_path)
-
-    # Read bytes and compute SHA256
     with open(file_path, "rb") as f:
         file_bytes = f.read()
     sha256 = hashlib.sha256(file_bytes).hexdigest()
-
-    now = datetime.now(timezone.utc).isoformat()
-    entry = {
-        "sha256": sha256,
-        "filename": filename,
-        "datetime": "",
-        "uploaded_at": now,
-        "status": "parse_error",
-        "duration_seconds": 0,
-        "teams": {},
-        "winning_team_id": None,
-        "fingerprint": "",
-        "player_deltas": {},
-        "game_level_deltas": {},
-    }
-
-    # Parse replay
-    try:
-        match_obj = parse_match(io.BytesIO(file_bytes))
-    except Exception as e:
-        logger.warning(f"Parse error for {filename}: {e}")
-        return entry, file_bytes
-
-    if not match_obj:
-        return entry, file_bytes
-
-    # Extract metadata
-    try:
-        match_filename = getattr(match_obj, "filename", "") or filename
-        entry["filename"] = match_filename
-
-        duration_seconds = match_obj.duration.total_seconds()
-        entry["duration_seconds"] = duration_seconds
-
-        try:
-            dt = get_datetime_from_filename(match_filename)
-            entry["datetime"] = dt.isoformat()
-        except Exception:
-            pass
-        if not entry["datetime"] and hasattr(match_obj, "timestamp"):
-            entry["datetime"] = str(match_obj.timestamp)
-    except Exception as e:
-        logger.warning(f"Metadata error for {filename}: {e}")
-        return entry, file_bytes
-
-    # Duration check
-    if duration_seconds < MIN_GAME_DURATION_SECONDS:
-        entry["status"] = "too_short"
-        return entry, file_bytes
-
-    # Filter human players
-    human_players = [
-        p
-        for p in match_obj.players
-        if hasattr(p, "profile_id") and p.profile_id is not None
-    ]
-
-    # Check for unknown players
-    canonical_names = set(config.PLAYER_ALIASES.values())
-    for p in human_players:
-        aliased = config.PLAYER_ALIASES.get(p.name, p.name)
-        if aliased not in canonical_names:
-            entry["status"] = "unknown_player"
-            return entry, file_bytes
-
-    # Apply aliases
-    for p in human_players:
-        p.name = config.PLAYER_ALIASES.get(p.name, p.name)
-
-    # Build teams
-    teams_data = defaultdict(list)
-    for p in human_players:
-        team_id = p.team_id
-        if isinstance(team_id, list):
-            team_id = team_id[0] if team_id else -1
-        teams_data[team_id].append(p)
-
-    # Determine winning team
-    winning_team_id = None
-    for team_id, players_in_team in teams_data.items():
-        if any(p.winner for p in players_in_team):
-            winning_team_id = team_id
-            break
-
-    teams_dict = {}
-    for tid, players in teams_data.items():
-        teams_dict[str(tid)] = [
-            {
-                "name": p.name,
-                "civ": getattr(p, "civilization", "Unknown"),
-                "winner": bool(p.winner),
-                "handicap": getattr(p, "handicap", 100),
-                "eapm": getattr(p, "eapm", None),
-            }
-            for p in players
-        ]
-
-    entry["teams"] = teams_dict
-    entry["winning_team_id"] = (
-        str(winning_team_id) if winning_team_id is not None else None
-    )
-
-    # Compute fingerprint
-    if entry["datetime"] and teams_dict:
-        entry["fingerprint"] = compute_game_fingerprint(
-            entry["datetime"], teams_dict
-        )
-
-    # Extract action-based deltas
-    try:
-        player_deltas, game_deltas = extract_single_game_deltas(
-            match_obj, human_players
-        )
-        entry["player_deltas"] = player_deltas
-        entry["game_level_deltas"] = game_deltas
-    except Exception as e:
-        logger.warning(f"Delta extraction failed for {filename}: {e}")
-
-    if winning_team_id is None:
-        entry["status"] = "no_winner"
-    else:
-        entry["status"] = "processed"
-
+    entry = replay_to_registry_entry(file_bytes, sha256, filename_hint=filename)
     return entry, file_bytes
 
 

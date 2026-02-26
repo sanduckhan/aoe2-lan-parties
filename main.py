@@ -1,11 +1,13 @@
 # main.py - Main entry point for the AoE2 LAN Party Analyzer
 
 import json
+import logging
 import os
 import sys
 
-from analyzer_lib.replay_parser import parse_replays_parallel
-from analyzer_lib.analyze_games import analyze_all_games
+from analyzer_lib import config
+from analyzer_lib.registry_builder import sync_registry_from_disk
+from analyzer_lib.registry_stats import accumulate_stats_from_games
 from analyzer_lib.report_generator import (
     print_report,
     compute_all_awards,
@@ -13,50 +15,73 @@ from analyzer_lib.report_generator import (
     compute_player_profiles,
 )
 
-# Allow importing from scripts/
+# Allow importing from scripts/ and server/
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts'))
-from calculate_trueskill import run_trueskill
+from calculate_trueskill import run_trueskill_from_registry
+
+from server.processing import GameRegistry
+
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 def main():
     """
     Main function to run the AoE2 LAN Party Analyzer.
-    Parses all replays once in parallel, then feeds them to both
-    the analysis pipeline and TrueSkill calculation.
+    Uses a registry-first approach: only parses new replays, then
+    rebuilds stats and ratings from the cached registry.
     """
     print("--- Starting AoE2 LAN Party Analyzer ---")
 
-    # Parse all replays once (parallel), reuse for both analysis and TrueSkill
-    parsed_matches = parse_replays_parallel()
-    if not parsed_matches:
+    # Step 1: Load or create registry, sync from local replay files
+    registry = GameRegistry(data_dir=config.DATA_DIR)
+    sync_result = sync_registry_from_disk(registry)
+    print(f"Registry sync: {sync_result}")
+
+    # Step 2: Get all analysis-eligible games from registry
+    all_games = registry.get_all_data()["games"]
+    analysis_games = [
+        g for g in all_games if g.get("status") in ("processed", "no_winner")
+    ]
+    analysis_games.sort(key=lambda g: g.get("datetime", ""))
+
+    if not analysis_games:
         print("No valid games found. Exiting.")
         return
 
-    result = analyze_all_games(parsed_matches=parsed_matches)
+    print(f"--- Rebuilding stats from {len(analysis_games)} games ---")
 
-    if result is None:
-        print("Analysis could not be completed. Exiting.")
-        return
+    # Step 3: Run TrueSkill first (to get per-game rating deltas)
+    processed_games = registry.get_games(status="processed")
+    _, _, _, rating_deltas = run_trueskill_from_registry(
+        processed_games, data_dir=config.DATA_DIR
+    )
 
-    analyzed_player_stats, analyzed_game_stats, game_results, head_to_head = result
+    # Step 4: Accumulate stats from registry (no replay parsing)
+    player_stats, game_stats, game_results, head_to_head = (
+        accumulate_stats_from_games(analysis_games)
+    )
 
-    # Generate and print the analytics report
-    print_report(analyzed_player_stats, analyzed_game_stats)
+    # Step 5: Merge rating deltas into game_results
+    for gr in game_results:
+        sha = gr.get("sha256")
+        if sha and sha in rating_deltas:
+            gr["rating_changes"] = rating_deltas[sha]
 
-    # Save analysis data as JSON for the web UI
+    # Step 6: Print CLI report
+    print_report(player_stats, game_stats)
+
+    # Step 7: Save analysis_data.json
     analysis_data = {
-        "awards": compute_all_awards(analyzed_player_stats, analyzed_game_stats),
-        "general_stats": compute_general_stats(analyzed_game_stats),
+        "awards": compute_all_awards(player_stats, game_stats),
+        "general_stats": compute_general_stats(game_stats),
         "game_results": game_results,
-        "player_profiles": compute_player_profiles(analyzed_player_stats, head_to_head),
+        "player_profiles": compute_player_profiles(player_stats, head_to_head),
     }
 
-    with open("analysis_data.json", "w") as f:
+    output_path = os.path.join(config.DATA_DIR, "analysis_data.json")
+    with open(output_path, "w") as f:
         json.dump(analysis_data, f, indent=2, default=str)
-    print("Analysis data saved to analysis_data.json")
-
-    # Run TrueSkill with the same parsed replays (no re-parsing)
-    run_trueskill(parsed_matches=parsed_matches)
+    print(f"Analysis data saved to {output_path}")
 
     print("--- AoE2 LAN Party Analyzer Finished ---")
 

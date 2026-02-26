@@ -1,6 +1,6 @@
 from functools import wraps
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 from analyzer_lib import config
 from web import services
@@ -124,6 +124,19 @@ def api_games():
         return jsonify(services.get_games_for_api())
     except FileNotFoundError:
         return jsonify({"error": "analysis_data.json not found. Run main.py first."}), 404
+
+
+@app.route("/api/games/<sha256>/download")
+def api_game_download(sha256):
+    result = services.get_replay_download(sha256)
+    if result is None:
+        return jsonify({"error": "Replay file not found"}), 404
+    file_bytes, filename = result
+    return Response(
+        file_bytes,
+        mimetype="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.route("/api/stats")

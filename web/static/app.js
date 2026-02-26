@@ -570,11 +570,18 @@ function renderGameHistory(games) {
 
         window._chronicleGames[i] = g;
 
-        const formatPlayers = (players, streaks) => players.map(p => {
+        const formatPlayers = (players, streaks, ratingChanges) => players.map(p => {
             const badge = streaks && streaks[p.name]
                 ? `<span class="streak-badge ${streaks[p.name][0] === 'W' ? 'win-streak' : 'loss-streak'}">${streaks[p.name]}</span>`
                 : '';
-            return `<a class="player-link" onclick="openPlayerProfile('${p.name}')">${p.name}</a>${badge}`;
+            let ratingBadge = '';
+            if (ratingChanges && ratingChanges[p.name] != null) {
+                const delta = ratingChanges[p.name];
+                const sign = delta >= 0 ? '+' : '';
+                const cls = delta >= 0 ? 'rating-up' : 'rating-down';
+                ratingBadge = `<span class="rating-delta ${cls}">${sign}${delta}</span>`;
+            }
+            return `<a class="player-link" onclick="openPlayerProfile('${p.name}')">${p.name}</a>${ratingBadge}${badge}`;
         }).join(', ');
 
         const dateStr = g.datetime !== '0001-01-01T00:00:00' ? new Date(g.datetime).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : '?';
@@ -583,22 +590,27 @@ function renderGameHistory(games) {
             ? `<button class="btn-chronicle-redeploy" onclick="redeployFromChronicle(${i})" title="Redeploy these teams">Redeploy</button>`
             : '';
 
+        const downloadBtn = g.sha256
+            ? `<a class="btn-chronicle-download" href="/api/games/${g.sha256}/download" title="Download replay">\u2B73</a>`
+            : '';
+
         return `
         <div class="history-entry" style="animation-delay: ${Math.min(i * 0.02, 0.5)}s">
             <div class="history-date">${dateStr}</div>
             <div class="history-teams">
                 <div class="history-team history-winner">
                     <span class="history-team-label">Victory</span>
-                    <span class="history-players">${formatPlayers(winTeam.players, g.streaks)}</span>
+                    <span class="history-players">${formatPlayers(winTeam.players, g.streaks, g.rating_changes)}</span>
                 </div>
                 <span class="history-vs">\u2694</span>
                 <div class="history-team history-loser">
                     <span class="history-team-label">Defeat</span>
-                    <span class="history-players">${formatPlayers(loseTeam.players, g.streaks)}</span>
+                    <span class="history-players">${formatPlayers(loseTeam.players, g.streaks, g.rating_changes)}</span>
                 </div>
             </div>
             <div class="history-meta">
                 ${redeployBtn}
+                ${downloadBtn}
                 <span class="history-duration">${g.duration_display}</span>
             </div>
         </div>`;
