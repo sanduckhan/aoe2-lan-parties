@@ -1,3 +1,4 @@
+import logging
 import os
 from collections import defaultdict
 from . import config
@@ -285,7 +286,7 @@ def _calculate_losing_streaks(player_game_chronology, player_stats):
     Returns:
         None
     """
-    print("--- Calculating Losing Streaks ---")
+    logging.debug("Calculating losing streaks...")
     for player_name, games in player_game_chronology.items():
         if not games: 
             player_stats[player_name]['max_losing_streak'] = 0

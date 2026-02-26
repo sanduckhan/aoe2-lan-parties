@@ -288,7 +288,7 @@ class TrueSkillCalculator:
                 delta_sigma = new_sigma_scaled - old_sigma_scaled
                 handicap = player_handicaps.get(player_name, 100)
                 handicap_str = f" [Handicap: {handicap}%]" if handicap > 100 else ""
-                logging.info(
+                logging.debug(
                     f"Update | Game: {game_data.filename} | Player: {player_name:<15}{handicap_str} | "
                     f"μ: {old_mu_scaled:7.2f} → {new_mu_scaled:7.2f} ({delta_mu:+.2f}) | "
                     f"σ: {old_sigma_scaled:6.2f} → {new_sigma_scaled:6.2f} ({delta_sigma:+.2f})"
@@ -316,7 +316,7 @@ class TrueSkillCalculator:
                 delta_sigma = new_sigma_scaled - old_sigma_scaled
                 handicap = player_handicaps.get(player_name, 100)
                 handicap_str = f" [Handicap: {handicap}%]" if handicap > 100 else ""
-                logging.info(
+                logging.debug(
                     f"Update | Game: {game_data.filename} | Player: {player_name:<15}{handicap_str} | "
                     f"μ: {old_mu_scaled:7.2f} → {new_mu_scaled:7.2f} ({delta_mu:+.2f}) | "
                     f"σ: {old_sigma_scaled:6.2f} → {new_sigma_scaled:6.2f} ({delta_sigma:+.2f})"
