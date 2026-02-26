@@ -1,8 +1,42 @@
+from functools import wraps
+
 from flask import Flask, jsonify, render_template, request
 
+from analyzer_lib import config
 from web import services
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB
+
+
+# --- CORS ---
+
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-API-Key"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+
+# --- Auth ---
+
+
+def require_api_key(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not config.API_KEY:
+            return jsonify({"error": "API key not configured"}), 503
+        key = request.headers.get("X-API-Key", "")
+        if key != config.API_KEY:
+            return jsonify({"error": "Invalid API key"}), 401
+        return f(*args, **kwargs)
+
+    return decorated
+
+
+# --- Read-only endpoints (no auth) ---
 
 
 @app.route("/")
@@ -59,8 +93,25 @@ def api_rebalance_teams():
     return jsonify(result)
 
 
+@app.route("/api/lan-events")
+def api_lan_events():
+    try:
+        return jsonify(services.get_lan_events_for_api())
+    except FileNotFoundError:
+        return jsonify([])
+
+
 @app.route("/api/awards")
 def api_awards():
+    event_id = request.args.get("event_id")
+    if event_id:
+        try:
+            awards = services.compute_event_awards(event_id)
+            if awards is None:
+                return jsonify({"error": "LAN event not found"}), 404
+            return jsonify(awards)
+        except FileNotFoundError:
+            return jsonify({"error": "game_registry.json not found"}), 404
     try:
         return jsonify(services.get_awards_for_api())
     except FileNotFoundError:
@@ -100,3 +151,36 @@ def api_rating_history():
         return jsonify(services.get_rating_history_for_api())
     except FileNotFoundError:
         return jsonify({"error": "rating_history.json not found. Run calculate_trueskill.py first."}), 404
+
+
+# --- Write endpoints (API key required) ---
+
+
+@app.route("/api/upload", methods=["POST"])
+@require_api_key
+def api_upload():
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files["file"]
+    sha256 = request.form.get("sha256", "").strip()
+    if not sha256:
+        return jsonify({"error": "sha256 field is required"}), 400
+
+    file_bytes = file.read()
+    result = services.process_upload(file_bytes, sha256)
+
+    if "error" in result:
+        return jsonify(result), 400
+    if result.get("status") == "duplicate":
+        return jsonify({"status": "duplicate", "message": "Game already processed"}), 409
+    return jsonify(result), 200
+
+
+@app.route("/api/rebuild", methods=["POST"])
+@require_api_key
+def api_rebuild():
+    result = services.trigger_rebuild()
+    if "error" in result:
+        return jsonify(result), 500
+    return jsonify(result), 200
