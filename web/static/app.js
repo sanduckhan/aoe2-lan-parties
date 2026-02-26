@@ -44,20 +44,38 @@ const state = {
     manualAssignments: {},
 };
 
-// ---- Tab switching ----
+// ---- Tab switching & hash routing ----
 let awardsFetched = false;
 let historyFetched = false;
 
+const VALID_TABS = ['ratings', 'awards', 'history', 'generator', 'game'];
+
 document.querySelectorAll('.tab').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    btn.addEventListener('click', () => navigateTo(btn.dataset.tab));
 });
 
+// Navigate by updating the hash — this triggers hashchange which calls handleRoute
+function navigateTo(route) {
+    const newHash = '#' + route;
+    if (location.hash === newHash) return;
+    location.hash = newHash;
+}
+
+// Internal tab switch — does NOT touch the hash (called from handleRoute)
 function switchTab(tabId) {
     SoundFX.scroll();
     document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
-    document.querySelector(`.tab[data-tab="${tabId}"]`).classList.add('active');
+    const tabBtn = document.querySelector(`.tab[data-tab="${tabId}"]`);
+    if (tabBtn) tabBtn.classList.add('active');
     document.getElementById(tabId).classList.add('active');
+
+    // Close player modal if open and we're navigating to a tab
+    const modal = document.getElementById('player-modal');
+    if (modal.style.display !== 'none') {
+        modal.style.display = 'none';
+        document.body.classList.remove('modal-open');
+    }
 
     // Lazy-load tabs
     if (tabId === 'awards' && !awardsFetched) {
@@ -69,6 +87,35 @@ function switchTab(tabId) {
         fetchGameHistory();
     }
 }
+
+// Parse the current hash and route accordingly
+function handleRoute() {
+    const hash = location.hash.slice(1); // remove '#'
+    if (!hash) {
+        switchTab('ratings');
+        return;
+    }
+
+    // Player profile route: #player/Name
+    if (hash.startsWith('player/')) {
+        const playerName = decodeURIComponent(hash.slice('player/'.length));
+        if (playerName) {
+            openPlayerProfile(playerName, /* fromRoute */ true);
+            return;
+        }
+    }
+
+    // Tab route
+    if (VALID_TABS.includes(hash)) {
+        switchTab(hash);
+        return;
+    }
+
+    // Unknown hash — default to ratings
+    switchTab('ratings');
+}
+
+window.addEventListener('hashchange', handleRoute);
 
 // =====================
 // RATINGS TAB
@@ -495,7 +542,13 @@ document.addEventListener('DOMContentLoaded', () => {
 // =====================
 // PLAYER PROFILE MODAL
 // =====================
-async function openPlayerProfile(name) {
+async function openPlayerProfile(name, fromRoute) {
+    // If triggered by a click (not from hash routing), update the hash
+    if (!fromRoute) {
+        navigateTo('player/' + encodeURIComponent(name));
+        return; // hashchange handler will call us back with fromRoute=true
+    }
+
     const modal = document.getElementById('player-modal');
     modal.style.display = 'flex';
     document.body.classList.add('modal-open');
@@ -599,8 +652,14 @@ function renderPlayerProfile(p) {
 
 function closePlayerModal(event) {
     if (event && event.target !== event.currentTarget) return;
-    document.getElementById('player-modal').style.display = 'none';
+    const modal = document.getElementById('player-modal');
+    if (modal.style.display === 'none') return;
+    modal.style.display = 'none';
     document.body.classList.remove('modal-open');
+    // Navigate back if we're on a player route
+    if (location.hash.startsWith('#player/')) {
+        history.back();
+    }
 }
 
 document.addEventListener('keydown', (e) => {
@@ -686,52 +745,90 @@ function renderSuggestions(data) {
         let changesHtml = '';
         if (s.rating_changes && Object.keys(s.rating_changes).length > 0) {
             changesHtml = `
-                <button class="card-changes-toggle" onclick="toggleChanges('${changesId}', this)">Show rating changes</button>
-                <div class="card-changes" id="${changesId}">
-                    <div class="card-changes-grid">
-                        <div>
-                            ${s.team1.map(p => ratingChangeRowInline(p.name, s.rating_changes)).join('')}
-                        </div>
-                        <div>
-                            ${s.team2.map(p => ratingChangeRowInline(p.name, s.rating_changes)).join('')}
+                <div class="bp-changes-wrap">
+                    <button class="card-changes-toggle" onclick="toggleChanges('${changesId}', this)">Show rating changes</button>
+                    <div class="card-changes" id="${changesId}">
+                        <div class="card-changes-grid">
+                            <div>
+                                ${s.team1.map(p => ratingChangeRowInline(p.name, s.rating_changes)).join('')}
+                            </div>
+                            <div>
+                                ${s.team2.map(p => ratingChangeRowInline(p.name, s.rating_changes)).join('')}
+                            </div>
                         </div>
                     </div>
                 </div>
             `;
         }
 
-        const t1Avg = (s.team1.reduce((sum, p) => sum + p.rating, 0) / s.team1.length).toFixed(0);
-        const t2Avg = (s.team2.reduce((sum, p) => sum + p.rating, 0) / s.team2.length).toFixed(0);
+        const t1Avg = s.team1.reduce((sum, p) => sum + p.rating, 0) / s.team1.length;
+        const t2Avg = s.team2.reduce((sum, p) => sum + p.rating, 0) / s.team2.length;
+        const totalAvg = t1Avg + t2Avg;
+        const t1Pct = totalAvg > 0 ? (t1Avg / totalAvg * 100) : 50;
+
+        const quality = s.match_quality;
+        const qualityClass = quality >= 90 ? 'quality-excellent' : quality >= 80 ? 'quality-good' : quality >= 70 ? 'quality-fair' : 'quality-poor';
+
+        // Determine which team is favored (1, 2, or 0 for even)
+        const favored = s.expected_winner.includes('1') ? 1 : s.expected_winner.includes('2') ? 2 : 0;
+
+        const renderPlayer = (p) => {
+            const hasBoost = p.recommended_hc > 100;
+            return `<div class="bp-player">
+                <span class="bp-player-name"><a class="player-link" onclick="openPlayerProfile('${p.name}')">${p.name}</a></span>
+                <span class="bp-player-hc ${hasBoost ? 'bp-hc-active' : ''}">${p.recommended_hc}%</span>
+            </div>`;
+        };
 
         card.innerHTML = `
-            <div class="card-header">
-                <h3>Battle Plan #${i + 1}</h3>
-                <span class="card-quality">Quality: ${s.match_quality.toFixed(1)}%</span>
-            </div>
-            <div class="card-teams">
-                <div>
-                    <div class="card-team-label">Team I <span class="card-team-avg">&mdash; avg ${t1Avg}</span></div>
-                    <ul class="card-team-list">
-                        ${s.team1.map(p => `<li>${p.name} <span class="player-hc">${p.recommended_hc}%</span></li>`).join('')}
-                    </ul>
+            <div class="bp-accent ${qualityClass}"></div>
+            <div class="bp-header">
+                <div class="bp-plan-id">
+                    <span class="bp-number">#${i + 1}</span>
+                    <span class="bp-label">Battle Plan</span>
                 </div>
-                <div class="card-vs">VS</div>
-                <div>
-                    <div class="card-team-label">Team II <span class="card-team-avg">&mdash; avg ${t2Avg}</span></div>
-                    <ul class="card-team-list">
-                        ${s.team2.map(p => `<li>${p.name} <span class="player-hc">${p.recommended_hc}%</span></li>`).join('')}
-                    </ul>
+                <div class="bp-quality ${qualityClass}">
+                    <span class="bp-quality-value">${quality.toFixed(1)}<small>%</small></span>
+                    <span class="bp-quality-label">Quality</span>
                 </div>
             </div>
+
+            <div class="bp-strength">
+                <div class="bp-strength-track">
+                    <div class="bp-strength-fill" style="width: ${t1Pct.toFixed(1)}%"></div>
+                </div>
+                <div class="bp-strength-labels">
+                    <span>avg ${t1Avg.toFixed(0)}</span>
+                    <span>avg ${t2Avg.toFixed(0)}</span>
+                </div>
+            </div>
+
+            <div class="bp-teams">
+                <div class="bp-team ${favored === 1 ? 'bp-team-favored' : ''}">
+                    <div class="bp-team-header">Team I${favored === 1 ? ' <span class="bp-favored-icon">&#9734;</span>' : ''}</div>
+                    <div class="bp-team-roster">
+                        ${s.team1.map(renderPlayer).join('')}
+                    </div>
+                </div>
+                <div class="bp-vs">&#9876;</div>
+                <div class="bp-team ${favored === 2 ? 'bp-team-favored' : ''}">
+                    <div class="bp-team-header">Team II${favored === 2 ? ' <span class="bp-favored-icon">&#9734;</span>' : ''}</div>
+                    <div class="bp-team-roster">
+                        ${s.team2.map(renderPlayer).join('')}
+                    </div>
+                </div>
+            </div>
+
             ${s.benched && s.benched.length > 0 ? `
-            <div class="card-bench">
-                <span class="card-bench-label">Resting:</span>
-                <span class="card-bench-names">${s.benched.map(p => p.name).join(', ')}</span>
+            <div class="bp-bench">
+                <span class="bp-bench-label">Resting</span>
+                <span class="bp-bench-names">${s.benched.map(p => p.name).join(', ')}</span>
             </div>` : ''}
+
             ${changesHtml}
-            <div class="card-footer">
-                <span class="card-expected">Expected: ${s.expected_winner}</span>
-                <button class="btn-primary btn-small" onclick='useSetup(${JSON.stringify(s)})'>Deploy</button>
+
+            <div class="bp-footer">
+                <button class="btn-primary" onclick='useSetup(${JSON.stringify(s)})'>Deploy</button>
             </div>
         `;
         container.appendChild(card);
@@ -767,7 +864,7 @@ function useSetup(suggestion) {
     state.ratingChanges = suggestion.rating_changes || {};
     state.matchQuality = suggestion.match_quality;
     state.expectedWinner = suggestion.expected_winner;
-    switchTab('game');
+    navigateTo('game');
     renderGameView();
 }
 
@@ -852,7 +949,7 @@ function goToManualSetup() {
     state.manualAssignments = {};
     players.forEach(name => { state.manualAssignments[name] = 'unassigned'; });
 
-    switchTab('game');
+    navigateTo('game');
     document.getElementById('game-empty').style.display = 'none';
     document.getElementById('game-content').style.display = 'none';
     document.getElementById('manual-setup').style.display = '';
@@ -1009,3 +1106,4 @@ function applyRebalance(suggestion) {
 // INIT
 // =====================
 fetchPlayers();
+handleRoute(); // Restore tab/modal from current URL hash
