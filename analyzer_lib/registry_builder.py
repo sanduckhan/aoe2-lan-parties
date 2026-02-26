@@ -22,26 +22,34 @@ REPLAY_EXTENSIONS = (".aoe2record", ".mgz", ".mgx")
 MIN_GAME_DURATION_SECONDS = 300
 
 
-def compute_game_fingerprint(game_datetime: str, teams: dict) -> str:
+def compute_game_fingerprint(
+    teams: dict, duration_seconds: float = 0, game_datetime: str = ""
+) -> str:
     """Compute a fingerprint that uniquely identifies a game regardless of recorder.
 
     Two replay files of the same game (recorded by different players) will have
-    different SHA256s but the same fingerprint, because the game datetime, player
-    names, civs, and team assignments are identical.
+    different SHA256s but the same fingerprint, because the player names, civs,
+    team assignments, and game duration are identical.
+
+    Note: datetime is NOT used because different recorders produce slightly
+    different timestamps (up to ~60s apart). Duration (rounded to nearest
+    minute) is used instead — it's game time, identical across recorders.
 
     Args:
-        game_datetime: ISO-format datetime string of the game.
         teams: Teams dict as stored in registry, e.g.
             {"1": [{"name": "Alice", "civ": "Britons", ...}, ...], "2": [...]}
+        duration_seconds: Game duration in seconds (rounded to nearest minute).
+        game_datetime: Unused, kept for backward compatibility.
 
     Returns:
         Hex SHA256 of the canonical representation.
     """
+    duration_minutes = round(duration_seconds / 60)
     players_canonical = []
     for tid in sorted(teams.keys()):
         for p in sorted(teams[tid], key=lambda x: x["name"]):
             players_canonical.append(f"{tid}:{p['name']}:{p.get('civ', '')}")
-    raw = f"{game_datetime}|{'|'.join(players_canonical)}"
+    raw = f"{duration_minutes}|{'|'.join(players_canonical)}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
@@ -170,8 +178,10 @@ def replay_to_registry_entry(file_bytes, sha256, filename_hint="", source_path=N
     )
 
     # --- Fingerprint ---
-    if entry["datetime"] and teams_dict:
-        entry["fingerprint"] = compute_game_fingerprint(entry["datetime"], teams_dict)
+    if teams_dict:
+        entry["fingerprint"] = compute_game_fingerprint(
+            teams_dict, duration_seconds=duration_seconds
+        )
 
     # --- Extract action-based deltas ---
     try:
