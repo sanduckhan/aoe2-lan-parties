@@ -1,0 +1,49 @@
+name: Build Windows Uploader
+
+on:
+  push:
+    paths:
+      - "client/**"
+  workflow_dispatch:  # manual trigger
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Inject server config
+        shell: pwsh
+        env:
+          SERVER_URL: ${{ secrets.UPLOADER_SERVER_URL }}
+          API_KEY: ${{ secrets.UPLOADER_API_KEY }}
+        run: |
+          if (-not $env:SERVER_URL -or -not $env:API_KEY) {
+            Write-Error "Missing secrets: set UPLOADER_SERVER_URL and UPLOADER_API_KEY in repo settings"
+            exit 1
+          }
+          $content = Get-Content uploader.py -Raw
+          $content = $content -replace 'SERVER_URL = "https://your-railway-app\.up\.railway\.app"', "SERVER_URL = `"$env:SERVER_URL`""
+          $content = $content -replace 'API_KEY = "your-api-key-here"', "API_KEY = `"$env:API_KEY`""
+          Set-Content uploader.py $content
+          Write-Host "Injected SERVER_URL=$env:SERVER_URL"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build exe
+        run: pyinstaller --onefile --windowed --name="AoE2 Uploader" uploader.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AoE2-Uploader
+          path: client/dist/AoE2 Uploader.exe
