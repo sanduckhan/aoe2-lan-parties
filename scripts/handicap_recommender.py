@@ -7,7 +7,7 @@ sys.path.append(PROJECT_ROOT)
 
 from analyzer_lib import config, db
 
-FLOOR_RATING = 700  # Target: no one should play below this effective rating
+FLOOR_RATING = 800  # Target: no one should play below this effective rating
 ELO_PER_STEP = 200  # 200 rating deficit = 5% handicap
 HC_STEP = 5
 
