@@ -264,15 +264,13 @@ def get_awards_for_api() -> Dict[str, Any]:
     return data
 
 
-def get_games_for_api() -> Dict[str, Any]:
-    games = db.load_analysis_cache(_get_db_path(), "game_results")
-    if games is None:
-        raise FileNotFoundError("No game results found in database")
+def _format_game_results(games: List[Dict]) -> List[Dict[str, Any]]:
+    """Format raw game_results into API-ready dicts, sorted chronologically with game_number."""
     formatted = []
     for g in games:
         winning_team_id = g.get("winning_team_id")
         if winning_team_id is None:
-            continue  # Skip games without a winner (avoid gaps in numbering)
+            continue
         teams_list = []
         for tid, players in g["teams"].items():
             teams_list.append(
@@ -297,7 +295,74 @@ def get_games_for_api() -> Dict[str, Any]:
     formatted.sort(key=lambda g: g["datetime"])
     for i, g in enumerate(formatted, 1):
         g["game_number"] = i
+    return formatted
+
+
+def _compute_streaks(games: List[Dict[str, Any]]) -> None:
+    """Compute running win/loss streaks in-place. Games must be in chronological order."""
+    streaks = {}  # player_name -> current streak count (positive=wins, negative=losses)
+    for g in games:
+        game_streaks = {}
+        for team in g["teams"]:
+            for p in team["players"]:
+                name = p["name"]
+                if team["is_winner"]:
+                    streaks[name] = max(0, streaks.get(name, 0)) + 1
+                    if streaks[name] >= 3:
+                        game_streaks[name] = f"W{streaks[name]}"
+                else:
+                    streaks[name] = min(0, streaks.get(name, 0)) - 1
+                    if streaks[name] <= -3:
+                        game_streaks[name] = f"L{abs(streaks[name])}"
+        g["streaks"] = game_streaks
+
+
+def get_games_for_api() -> Dict[str, Any]:
+    games = db.load_analysis_cache(_get_db_path(), "game_results")
+    if games is None:
+        raise FileNotFoundError("No game results found in database")
+    formatted = _format_game_results(games)
     return {"games": formatted, "total": len(formatted)}
+
+
+def get_games_paginated(
+    offset: int = 0,
+    limit: int = 30,
+    search: str = "",
+    sort: str = "desc",
+) -> Dict[str, Any]:
+    """Return paginated, searchable game results with streaks."""
+    games = db.load_analysis_cache(_get_db_path(), "game_results")
+    if games is None:
+        raise FileNotFoundError("No game results found in database")
+
+    formatted = _format_game_results(games)
+    _compute_streaks(formatted)
+
+    if search:
+        q = search.lower()
+        formatted = [
+            g
+            for g in formatted
+            if any(
+                q in p["name"].lower()
+                for team in g["teams"]
+                for p in team["players"]
+            )
+        ]
+
+    total = len(formatted)
+
+    if sort == "desc":
+        formatted.reverse()
+
+    page = formatted[offset : offset + limit]
+
+    return {
+        "games": page,
+        "total": total,
+        "has_more": (offset + limit) < total,
+    }
 
 
 def get_game_detail_for_api(sha256: str) -> Optional[Dict[str, Any]]:

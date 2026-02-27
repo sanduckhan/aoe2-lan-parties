@@ -1710,13 +1710,24 @@ button:hover {
 }
 
 .history-list {
-    max-height: 80vh;
+    max-height: calc(100vh - 340px);
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--gold-dark) transparent;
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
+}
+
+.scroll-loader {
+    padding: 1.5rem;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.scroll-loader .loading-text {
+    font-size: 0.9rem;
+    color: var(--text-muted);
 }
 
 /* ======================

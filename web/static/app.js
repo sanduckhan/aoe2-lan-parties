@@ -508,152 +508,207 @@ function renderAwards(data) {
 // =====================
 // GAME HISTORY TAB
 // =====================
-let allGames = [];
 let historySortOrder = 'desc';
+let historySearch = '';
+let historyOffset = 0;
+let historyTotal = 0;
+let historyHasMore = false;
+let historyLoading = false;
+let historyAbortController = null;
+let searchDebounceTimer = null;
 let expandedGameSha = null;
 const gameDetailCache = {};
 
-async function fetchGameHistory() {
+async function fetchGameHistory(append = false) {
+    // Cancel any in-flight request
+    if (historyAbortController) historyAbortController.abort();
+    historyAbortController = new AbortController();
+
+    if (historyLoading && append) return;
+    historyLoading = true;
+
+    if (!append) {
+        historyOffset = 0;
+        expandedGameSha = null;
+        const container = document.getElementById('history-list');
+        container.innerHTML = '<div class="loading-text">Unrolling the chronicles...</div>';
+    } else {
+        showScrollLoadingIndicator(true);
+    }
+
     try {
-        const res = await fetch('/api/games');
+        const params = new URLSearchParams({
+            offset: historyOffset,
+            limit: 30,
+            search: historySearch,
+            sort: historySortOrder,
+        });
+        const res = await fetch(`/api/games?${params}`, { signal: historyAbortController.signal });
         const data = await res.json();
+
         if (data.error) {
             document.getElementById('history-loading').innerHTML =
                 `<div class="loading-text">${data.error}</div>`;
             return;
         }
-        allGames = data.games || []; // Server returns ASC (oldest first)
-        applyHistoryView();
-        document.getElementById('history-loading').style.display = 'none';
-        document.getElementById('history-content').style.display = '';
-    } catch (err) {
-        document.getElementById('history-loading').innerHTML =
-            '<div class="loading-text">Failed to unroll the chronicles.</div>';
-        console.error(err);
-    }
-}
 
-function applyHistoryView() {
-    const q = (document.getElementById('history-filter')?.value || '').toLowerCase();
-    let games = [...allGames];
-    if (q) {
-        games = games.filter(g =>
-            g.teams.some(t => t.players.some(p => p.name.toLowerCase().includes(q)))
-        );
+        historyTotal = data.total;
+        historyHasMore = data.has_more;
+        historyOffset += data.games.length;
+
+        if (append) {
+            appendGameCards(data.games);
+        } else {
+            renderGameHistory(data.games);
+            document.getElementById('history-loading').style.display = 'none';
+            document.getElementById('history-content').style.display = '';
+        }
+
+        updateHistoryStatus();
+    } catch (err) {
+        if (err.name === 'AbortError') return;
+        if (!append) {
+            document.getElementById('history-loading').innerHTML =
+                '<div class="loading-text">Failed to unroll the chronicles.</div>';
+        }
+        console.error(err);
+    } finally {
+        historyLoading = false;
+        showScrollLoadingIndicator(false);
     }
-    const withStreaks = computeStreaks(games);
-    if (historySortOrder === 'desc') withStreaks.reverse();
-    renderGameHistory(withStreaks);
 }
 
 function toggleSortOrder() {
     historySortOrder = historySortOrder === 'asc' ? 'desc' : 'asc';
     const btn = document.getElementById('sort-toggle-btn');
     if (btn) btn.textContent = historySortOrder === 'asc' ? 'Newest First' : 'Oldest First';
-    applyHistoryView();
+    fetchGameHistory(false);
 }
 
-function computeStreaks(games) {
-    const streaks = {};
-    return games.map(g => {
-        const streakInfo = {};
-        if (!g.has_winner) return { ...g, streaks: streakInfo };
-        g.teams.forEach(team => {
-            team.players.forEach(p => {
-                if (team.is_winner) {
-                    streaks[p.name] = (streaks[p.name] > 0 ? streaks[p.name] : 0) + 1;
-                    if (streaks[p.name] >= 3) streakInfo[p.name] = `W${streaks[p.name]}`;
-                } else {
-                    streaks[p.name] = (streaks[p.name] < 0 ? streaks[p.name] : 0) - 1;
-                    if (streaks[p.name] <= -3) streakInfo[p.name] = `L${Math.abs(streaks[p.name])}`;
-                }
-            });
-        });
-        return { ...g, streaks: streakInfo };
-    });
+function formatPlayer(p, streaks, ratingChanges) {
+    const badge = streaks && streaks[p.name]
+        ? `<span class="streak-badge ${streaks[p.name][0] === 'W' ? 'win-streak' : 'loss-streak'}">${streaks[p.name]}</span>`
+        : '';
+    let ratingBadge = '';
+    if (ratingChanges && ratingChanges[p.name] != null) {
+        const delta = ratingChanges[p.name];
+        const sign = delta >= 0 ? '+' : '';
+        const cls = delta >= 0 ? 'rating-up' : 'rating-down';
+        ratingBadge = `<span class="rating-delta ${cls}">${sign}${Math.round(delta)}</span>`;
+    }
+    const hcText = p.handicap && p.handicap > 100
+        ? `<span class="gc-hc">(${p.handicap}%)</span>`
+        : '';
+    return `<span class="gc-player-chip">
+        <a class="player-link" onclick="event.stopPropagation(); openPlayerProfile('${p.name}')">${p.name}</a>${hcText}${ratingBadge}${badge}
+        <span class="gc-civ">${p.civilization || ''}</span>
+    </span>`;
+}
+
+function buildGameCardHTML(g) {
+    const winTeam = g.teams.find(t => t.is_winner);
+    const loseTeam = g.teams.find(t => !t.is_winner);
+    if (!winTeam || !loseTeam) return '';
+
+    const sha = g.sha256 || '';
+    window._chronicleGames[sha] = g;
+
+    const dateObj = g.datetime && g.datetime !== '0001-01-01T00:00:00' ? new Date(g.datetime) : null;
+    const dateStr = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : '?';
+
+    const gameNum = g.game_number || '';
+
+    return `
+    <div class="gc-entry" data-sha="${sha}">
+        <div class="gc-header" onclick="toggleGameDetail('${sha}')">
+            <div class="gc-left">
+                <span class="gc-number">#${gameNum}</span>
+                <span class="gc-date">${dateStr}</span>
+                <span class="gc-duration">${g.duration_display}</span>
+            </div>
+            <div class="gc-expand-icon">\u25BE</div>
+        </div>
+        <div class="gc-matchup" onclick="toggleGameDetail('${sha}')">
+            <div class="gc-side gc-winner-side">
+                <div class="gc-side-label gc-victory-label">Victory</div>
+                <div class="gc-players">
+                    ${winTeam.players.map(p => formatPlayer(p, g.streaks, g.rating_changes)).join('')}
+                </div>
+            </div>
+            <div class="gc-vs-divider"><span>vs</span></div>
+            <div class="gc-side gc-loser-side">
+                <div class="gc-side-label gc-defeat-label">Defeat</div>
+                <div class="gc-players">
+                    ${loseTeam.players.map(p => formatPlayer(p, g.streaks, g.rating_changes)).join('')}
+                </div>
+            </div>
+        </div>
+        <div class="gc-actions-bar">
+            ${g.has_winner ? `<button class="gc-action-btn gc-action-redeploy" onclick="event.stopPropagation(); redeployFromChronicle('${sha}')">\u2694 Redeploy</button>` : ''}
+            ${sha ? `<a class="gc-action-btn gc-action-download" href="/api/games/${sha}/download" onclick="event.stopPropagation()">\u2193 Download</a>` : ''}
+        </div>
+        <div class="gc-detail" id="detail-${sha}" style="display:none">
+            <div class="gc-detail-loading">Loading battle details...</div>
+        </div>
+    </div>`;
 }
 
 function renderGameHistory(games) {
     const container = document.getElementById('history-list');
     if (games.length === 0) {
-        container.innerHTML = '<div class="empty-state"><p>No battles recorded yet.</p></div>';
+        container.innerHTML = historySearch
+            ? '<div class="empty-state"><p>No battles match your search.</p></div>'
+            : '<div class="empty-state"><p>No battles recorded yet.</p></div>';
         return;
     }
 
     window._chronicleGames = {};
+    container.innerHTML = games.map(g => buildGameCardHTML(g)).join('');
+}
 
-    container.innerHTML = games.map((g, i) => {
-        const winTeam = g.teams.find(t => t.is_winner);
-        const loseTeam = g.teams.find(t => !t.is_winner);
-        if (!winTeam || !loseTeam) return '';
+function appendGameCards(games) {
+    const container = document.getElementById('history-list');
+    const html = games.map(g => buildGameCardHTML(g)).join('');
+    container.insertAdjacentHTML('beforeend', html);
+}
 
-        const sha = g.sha256 || '';
-        window._chronicleGames[sha || i] = g;
-
-        const formatPlayer = (p, streaks, ratingChanges) => {
-            const badge = streaks && streaks[p.name]
-                ? `<span class="streak-badge ${streaks[p.name][0] === 'W' ? 'win-streak' : 'loss-streak'}">${streaks[p.name]}</span>`
-                : '';
-            let ratingBadge = '';
-            if (ratingChanges && ratingChanges[p.name] != null) {
-                const delta = ratingChanges[p.name];
-                const sign = delta >= 0 ? '+' : '';
-                const cls = delta >= 0 ? 'rating-up' : 'rating-down';
-                ratingBadge = `<span class="rating-delta ${cls}">${sign}${Math.round(delta)}</span>`;
-            }
-            const hcText = p.handicap && p.handicap > 100
-                ? `<span class="gc-hc">(${p.handicap}%)</span>`
-                : '';
-            return `<span class="gc-player-chip">
-                <a class="player-link" onclick="event.stopPropagation(); openPlayerProfile('${p.name}')">${p.name}</a>${hcText}${ratingBadge}${badge}
-                <span class="gc-civ">${p.civilization || ''}</span>
-            </span>`;
-        };
-
-        const dateObj = g.datetime && g.datetime !== '0001-01-01T00:00:00' ? new Date(g.datetime) : null;
-        const dateStr = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : '?';
-
-        const gameNum = g.game_number || '';
-        const isExpanded = expandedGameSha === sha;
-
-        return `
-        <div class="gc-entry${isExpanded ? ' gc-expanded' : ''}" data-sha="${sha}">
-            <div class="gc-header" onclick="toggleGameDetail('${sha}')">
-                <div class="gc-left">
-                    <span class="gc-number">#${gameNum}</span>
-                    <span class="gc-date">${dateStr}</span>
-                    <span class="gc-duration">${g.duration_display}</span>
-                </div>
-                <div class="gc-expand-icon">\u25BE</div>
-            </div>
-            <div class="gc-matchup" onclick="toggleGameDetail('${sha}')">
-                <div class="gc-side gc-winner-side">
-                    <div class="gc-side-label gc-victory-label">Victory</div>
-                    <div class="gc-players">
-                        ${winTeam.players.map(p => formatPlayer(p, g.streaks, g.rating_changes)).join('')}
-                    </div>
-                </div>
-                <div class="gc-vs-divider"><span>vs</span></div>
-                <div class="gc-side gc-loser-side">
-                    <div class="gc-side-label gc-defeat-label">Defeat</div>
-                    <div class="gc-players">
-                        ${loseTeam.players.map(p => formatPlayer(p, g.streaks, g.rating_changes)).join('')}
-                    </div>
-                </div>
-            </div>
-            <div class="gc-actions-bar">
-                ${g.has_winner ? `<button class="gc-action-btn gc-action-redeploy" onclick="event.stopPropagation(); redeployFromChronicle('${sha}')">\u2694 Redeploy</button>` : ''}
-                ${sha ? `<a class="gc-action-btn gc-action-download" href="/api/games/${sha}/download" onclick="event.stopPropagation()">\u2193 Download</a>` : ''}
-            </div>
-            <div class="gc-detail" id="detail-${sha}" style="display:${isExpanded ? 'block' : 'none'}">
-                <div class="gc-detail-loading">Loading battle details...</div>
-            </div>
-        </div>`;
-    }).join('');
-
-    if (expandedGameSha && gameDetailCache[expandedGameSha]) {
-        renderGameDetail(expandedGameSha, gameDetailCache[expandedGameSha]);
+function updateHistoryStatus() {
+    const desc = document.querySelector('#history .section-desc');
+    if (desc) {
+        if (historySearch) {
+            desc.textContent = `${historyTotal} battle${historyTotal !== 1 ? 's' : ''} matching "${historySearch}"`;
+        } else {
+            desc.textContent = `A record of all ${historyTotal} engagements`;
+        }
     }
+}
+
+function showScrollLoadingIndicator(show) {
+    let indicator = document.getElementById('history-scroll-loader');
+    if (show) {
+        if (!indicator) {
+            const container = document.getElementById('history-list');
+            const div = document.createElement('div');
+            div.id = 'history-scroll-loader';
+            div.className = 'scroll-loader';
+            div.innerHTML = '<div class="loading-text">Loading more battles...</div>';
+            container.appendChild(div);
+        }
+    } else {
+        if (indicator) indicator.remove();
+    }
+}
+
+function setupInfiniteScroll() {
+    const container = document.getElementById('history-list');
+    if (!container) return;
+    container.addEventListener('scroll', () => {
+        if (historyLoading || !historyHasMore) return;
+        const { scrollTop, scrollHeight, clientHeight } = container;
+        if (scrollTop + clientHeight >= scrollHeight - 200) {
+            fetchGameHistory(true);
+        }
+    });
 }
 
 async function toggleGameDetail(sha256) {
@@ -832,12 +887,21 @@ function redeployFromChronicle(sha256Key) {
     });
 }
 
-// History filter
+// History filter (debounced server-side search) + infinite scroll
 document.addEventListener('DOMContentLoaded', () => {
     const filterInput = document.getElementById('history-filter');
     if (filterInput) {
-        filterInput.addEventListener('input', () => applyHistoryView());
+        filterInput.addEventListener('input', () => {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                historySearch = filterInput.value.trim();
+                historyFetched = false;
+                fetchGameHistory(false);
+                historyFetched = true;
+            }, 300);
+        });
     }
+    setupInfiniteScroll();
 });
 
 // =====================
