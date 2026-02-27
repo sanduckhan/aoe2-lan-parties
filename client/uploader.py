@@ -367,6 +367,7 @@ class UploaderDaemon:
                     logger.info(
                         "SKIP   %s — file still changing", os.path.basename(path)
                     )
+                    self._known_files.discard(path)
                     continue
                 if not self._process_file(path):
                     file_hash = sha256_file(path)
