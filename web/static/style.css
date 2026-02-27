@@ -1843,6 +1843,11 @@ button:hover {
     margin-right: 0.3rem;
 }
 
+.gc-loser-side .gc-player-chip .gc-hc-badge {
+    margin-left: 0;
+    margin-right: 0.3rem;
+}
+
 .gc-players {
     display: flex;
     flex-wrap: wrap;
@@ -1989,6 +1994,19 @@ button:hover {
 
 .rating-delta.rating-up { color: var(--green-bright); }
 .rating-delta.rating-down { color: var(--red-bright); }
+
+.gc-hc-badge {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.12rem 0.4rem;
+    margin-left: 0.3rem;
+    vertical-align: middle;
+    color: var(--gold);
+    border: 1px solid var(--gold-dark);
+    background: rgba(212, 175, 55, 0.1);
+}
 
 /* =========================
    GAME DETAIL — EXPANDED
@@ -2257,6 +2275,11 @@ button:hover {
     }
 
     .gc-loser-side .gc-player-chip .streak-badge {
+        margin-right: 0;
+        margin-left: 0.3rem;
+    }
+
+    .gc-loser-side .gc-player-chip .gc-hc-badge {
         margin-right: 0;
         margin-left: 0.3rem;
     }

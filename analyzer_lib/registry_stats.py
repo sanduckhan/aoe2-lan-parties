@@ -167,6 +167,7 @@ def accumulate_stats_from_games(games):
                     "name": p["name"],
                     "civilization": p.get("civ", "Unknown"),
                     "winner": bool(p.get("winner", False)),
+                    "handicap": p.get("handicap", 100),
                 }
                 for p in players
             ]
