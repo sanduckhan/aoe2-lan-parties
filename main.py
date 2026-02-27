@@ -50,7 +50,7 @@ def main():
     print(f"--- Rebuilding stats from {len(analysis_games)} games ---")
 
     # Step 3: Run TrueSkill first (to get per-game rating deltas)
-    ratable_games = registry.get_games(status=["processed", "no_winner"])
+    ratable_games = registry.get_games(status="processed")
     _, _, _, rating_deltas = run_trueskill_from_registry(
         ratable_games, data_dir=config.DATA_DIR
     )

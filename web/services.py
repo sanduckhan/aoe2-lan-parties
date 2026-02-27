@@ -234,6 +234,8 @@ def get_games_for_api() -> Dict[str, Any]:
     formatted = []
     for g in games:
         winning_team_id = g.get("winning_team_id")
+        if winning_team_id is None:
+            continue  # Skip games without a winner (avoid gaps in numbering)
         teams_list = []
         for tid, players in g["teams"].items():
             teams_list.append(
@@ -250,7 +252,7 @@ def get_games_for_api() -> Dict[str, Any]:
                 "duration_seconds": g["duration_seconds"],
                 "duration_display": str(timedelta(seconds=int(g["duration_seconds"]))),
                 "teams": teams_list,
-                "has_winner": winning_team_id is not None,
+                "has_winner": True,
                 "sha256": g.get("sha256"),
                 "rating_changes": g.get("rating_changes"),
             }

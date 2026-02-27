@@ -177,7 +177,7 @@ def main():
 
     # ── Step 5: Generate TrueSkill ratings ─────────────────────────────
     logger.info("Generating TrueSkill ratings...")
-    ratable_games = registry.get_games(status=["processed", "no_winner"])
+    ratable_games = registry.get_games(status="processed")
     run_trueskill_from_registry(ratable_games, data_dir=data_dir)
     logger.info("TrueSkill ratings saved")
 

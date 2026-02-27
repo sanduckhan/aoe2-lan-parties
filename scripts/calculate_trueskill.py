@@ -641,7 +641,7 @@ def main():
     from server.processing import GameRegistry
 
     registry = GameRegistry(data_dir=config.DATA_DIR)
-    ratable_games = registry.get_games(status=["processed", "no_winner"])
+    ratable_games = registry.get_games(status="processed")
     if not ratable_games:
         logging.error("No processed games in registry. Run main.py first.")
         return

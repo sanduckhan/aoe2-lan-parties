@@ -1829,23 +1829,7 @@ button:hover {
 }
 
 .gc-loser-side .gc-player-chip {
-    flex-direction: row-reverse;
     text-align: right;
-}
-
-.gc-loser-side .gc-player-chip .rating-delta {
-    margin-left: 0;
-    margin-right: 0.3rem;
-}
-
-.gc-loser-side .gc-player-chip .streak-badge {
-    margin-left: 0;
-    margin-right: 0.3rem;
-}
-
-.gc-loser-side .gc-player-chip .gc-hc-badge {
-    margin-left: 0;
-    margin-right: 0.3rem;
 }
 
 .gc-players {
@@ -1995,17 +1979,11 @@ button:hover {
 .rating-delta.rating-up { color: var(--green-bright); }
 .rating-delta.rating-down { color: var(--red-bright); }
 
-.gc-hc-badge {
-    font-family: var(--font-display);
-    font-size: 0.6rem;
+.gc-hc {
+    font-size: 1rem;
     font-weight: 700;
-    letter-spacing: 0.04em;
-    padding: 0.12rem 0.4rem;
     margin-left: 0.3rem;
-    vertical-align: middle;
     color: var(--gold);
-    border: 1px solid var(--gold-dark);
-    background: rgba(212, 175, 55, 0.1);
 }
 
 /* =========================
@@ -2262,26 +2240,6 @@ button:hover {
 
     .gc-loser-side .gc-players {
         justify-content: flex-start;
-    }
-
-    .gc-loser-side .gc-player-chip {
-        flex-direction: row;
-        text-align: left;
-    }
-
-    .gc-loser-side .gc-player-chip .rating-delta {
-        margin-right: 0;
-        margin-left: 0.3rem;
-    }
-
-    .gc-loser-side .gc-player-chip .streak-badge {
-        margin-right: 0;
-        margin-left: 0.3rem;
-    }
-
-    .gc-loser-side .gc-player-chip .gc-hc-badge {
-        margin-right: 0;
-        margin-left: 0.3rem;
     }
 
     .gd-battle-grid {

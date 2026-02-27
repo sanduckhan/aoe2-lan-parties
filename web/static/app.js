@@ -601,11 +601,11 @@ function renderGameHistory(games) {
                 const cls = delta >= 0 ? 'rating-up' : 'rating-down';
                 ratingBadge = `<span class="rating-delta ${cls}">${sign}${Math.round(delta)}</span>`;
             }
-            const hcBadge = p.handicap && p.handicap > 100
-                ? `<span class="gc-hc-badge">${p.handicap}%</span>`
+            const hcText = p.handicap && p.handicap > 100
+                ? `<span class="gc-hc">(${p.handicap}%)</span>`
                 : '';
             return `<span class="gc-player-chip">
-                <a class="player-link" onclick="event.stopPropagation(); openPlayerProfile('${p.name}')">${p.name}</a>${ratingBadge}${badge}${hcBadge}
+                <a class="player-link" onclick="event.stopPropagation(); openPlayerProfile('${p.name}')">${p.name}</a>${hcText}${ratingBadge}${badge}
                 <span class="gc-civ">${p.civilization || ''}</span>
             </span>`;
         };

@@ -385,9 +385,7 @@ class IncrementalProcessor:
         try:
             rating_deltas = {}
             try:
-                ratable_games = self._registry.get_games(
-                    status=["processed", "no_winner"]
-                )
+                ratable_games = self._registry.get_games(status="processed")
                 _, _, _, rating_deltas = run_trueskill_from_registry(
                     ratable_games, data_dir=self._data_dir
                 )
