@@ -489,15 +489,19 @@ function renderAwards(data) {
     // Balanced matchup — special card
     if (data.balanced_matchup) {
         const m = data.balanced_matchup;
+        const fmtTeam = (names, hcMap) => names.map(n => {
+            const hc = hcMap && hcMap[n];
+            return hc ? `${n} <span class="gc-hc">(${Math.round(hc)}%)</span>` : n;
+        }).join(', ');
         const card = document.createElement('div');
         card.className = 'award-card award-card-wide';
         card.innerHTML = `
             <div class="award-icon">\u2696\uFE0F</div>
             <h3 class="award-title">Most Balanced Matchup</h3>
             <div class="matchup-display">
-                <span>${m.team_a.join(', ')}</span>
+                <span>${fmtTeam(m.team_a, m.team_a_handicaps)}</span>
                 <span class="matchup-vs">VS</span>
-                <span>${m.team_b.join(', ')}</span>
+                <span>${fmtTeam(m.team_b, m.team_b_handicaps)}</span>
             </div>
             <div class="matchup-score">${m.wins_a} - ${m.wins_b}</div>
         `;

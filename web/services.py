@@ -261,6 +261,25 @@ def get_awards_for_api() -> Dict[str, Any]:
     data = db.load_analysis_cache(_get_db_path(), "awards")
     if data is None:
         raise FileNotFoundError("No awards data found in database")
+
+    # Enrich balanced matchup with avg handicaps
+    matchup = data.get("balanced_matchup")
+    if matchup:
+        try:
+            ratings = {p["name"]: p for p in load_ratings()}
+            for key in ("team_a", "team_b"):
+                handicaps = {}
+                for name in matchup.get(key, []):
+                    r = ratings.get(name)
+                    if r:
+                        hc = round(r.get("avg_handicap_last_30", 100))
+                        if hc > 100:
+                            handicaps[name] = hc
+                if handicaps:
+                    matchup[f"{key}_handicaps"] = handicaps
+        except FileNotFoundError:
+            pass
+
     return data
 
 
