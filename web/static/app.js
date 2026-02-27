@@ -56,7 +56,7 @@ let historyFetched = false;
 let lanEventsFetched = false;
 let lanEventsData = [];
 
-const VALID_TABS = ['ratings', 'awards', 'history', 'generator', 'game', 'uploader'];
+const VALID_TABS = ['ratings', 'awards', 'history', 'generator', 'game', 'methodology', 'uploader'];
 
 document.querySelectorAll('.tab').forEach(btn => {
     btn.addEventListener('click', () => navigateTo(btn.dataset.tab));

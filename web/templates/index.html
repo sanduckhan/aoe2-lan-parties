@@ -41,6 +41,7 @@
                     <button class="tab" data-tab="game">Battle</button>
                 </div>
                 <div class="nav-divider"></div>
+                <button class="tab tab-utility" data-tab="methodology">&#9881; Methodology</button>
                 <button class="tab tab-utility" data-tab="uploader">&#8681; Uploader</button>
             </div>
         </nav>
@@ -283,6 +284,274 @@
                 <div class="manual-actions">
                     <button class="btn-primary" onclick="confirmManualSetup()">Commence Battle</button>
                     <button class="btn-secondary" onclick="cancelManualSetup()">Retreat</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Methodology Tab -->
+        <section id="methodology" class="tab-content">
+            <div class="uploader-page">
+                <div class="section-header">
+                    <h2>The Science Behind the Ratings</h2>
+                    <p class="section-desc">How we measure skill, uncertainty, and fairness</p>
+                </div>
+
+                <!-- ===== TrueSkill ===== -->
+                <div class="uploader-section">
+                    <h3>TrueSkill &mdash; A Bayesian Rating System</h3>
+                    <p>
+                        We use <strong>TrueSkill</strong>, a Bayesian skill rating system developed by
+                        Microsoft Research in 2006. Unlike Elo (designed for 1v1 chess), TrueSkill
+                        was built specifically for <strong>multiplayer team games</strong> &mdash;
+                        exactly the kind of team-based matches we play at our LAN parties.
+                    </p>
+                    <p>
+                        The core idea: every player is described by two numbers, not just one.
+                    </p>
+                    <ul class="uploader-list">
+                        <li>
+                            <strong>&mu; (mu)</strong> &mdash; the system's best estimate of your
+                            true skill level. Think of it as "how good we think you are."
+                        </li>
+                        <li>
+                            <strong>&sigma; (sigma)</strong> &mdash; the uncertainty around that
+                            estimate. Think of it as "how sure we are." A new player has high
+                            &sigma; (we know little); a veteran has low &sigma; (we're confident).
+                        </li>
+                    </ul>
+                    <p>
+                        After each game, TrueSkill compares what <em>should</em> have happened
+                        (based on team ratings) with what <em>actually</em> happened. If the
+                        underdog wins, the update is large. If the favorite wins as expected, the
+                        update is small. Both &mu; and &sigma; adjust &mdash; your rating moves
+                        <em>and</em> the system becomes more or less certain about you.
+                    </p>
+                </div>
+
+                <!-- ===== Our Parameters ===== -->
+                <div class="uploader-section">
+                    <h3>Our Parameter Choices</h3>
+                    <p>
+                        TrueSkill has several tuning knobs. Here's what we chose and why:
+                    </p>
+                    <ul class="uploader-list">
+                        <li>
+                            <strong>Initial &mu; = 25.0</strong> (displayed as 1000) &mdash;
+                            Every new player starts here. We multiply by a scaling factor of
+                            <strong>40</strong> to get familiar Elo-like numbers
+                            (25 &times; 40 = 1000).
+                        </li>
+                        <li>
+                            <strong>Initial &sigma; = 8.33</strong> (&mu; &divide; 3) &mdash;
+                            The default TrueSkill convention. This means we're initially saying
+                            "this player's true skill is <em>probably</em> somewhere between
+                            ~670 and ~1330" (within &plusmn;1 &sigma; scaled).
+                        </li>
+                        <li>
+                            <strong>&beta; = 4.17</strong> (&sigma; &divide; 2) &mdash;
+                            The performance variance. This models the fact that even a player of
+                            known skill won't perform identically every game. Higher &beta;
+                            means more randomness in outcomes; ours is moderate, reflecting that
+                            AoE2 has significant game-to-game variance (map generation,
+                            civilization matchups, strategy choices).
+                        </li>
+                        <li>
+                            <strong>&tau; = 0.167</strong> (&sigma; &divide; 50) &mdash;
+                            The dynamic factor. After each game, &sigma; ticks up slightly
+                            by &tau; before the update. This prevents ratings from "locking in"
+                            too early &mdash; it acknowledges that players improve (or get rusty)
+                            over time. Our small &tau; means ratings are responsive but stable.
+                        </li>
+                        <li>
+                            <strong>Draw probability = 0.0</strong> &mdash; AoE2 doesn't have
+                            draws. One team wins, one team loses.
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- ===== Confidence ===== -->
+                <div class="uploader-section">
+                    <h3>Confidence Score</h3>
+                    <p>
+                        The "Confidence" percentage you see on the leaderboard tells you how much
+                        the system has learned about a player:
+                    </p>
+                    <p style="text-align:center; padding: 0.75rem; background: var(--bg-card); border: 1px solid var(--border);">
+                        <strong style="color: var(--gold-bright); font-family: var(--font-display); letter-spacing: 0.04em;">
+                            Confidence = (1 &minus; &sigma;<sub>current</sub> &divide; &sigma;<sub>initial</sub>) &times; 100%
+                        </strong>
+                    </p>
+                    <p>
+                        A brand-new player is at 0%. As they play more games, &sigma; shrinks
+                        and confidence climbs. A player with 80%+ confidence has a very stable
+                        rating. Players below a threshold are listed as "Unproven Warriors" on
+                        the leaderboard &mdash; their ratings are still settling.
+                    </p>
+                </div>
+
+                <!-- ===== Recentering ===== -->
+                <div class="uploader-section">
+                    <h3>Rating Re-centering</h3>
+                    <p>
+                        There's a subtle problem with TrueSkill: it's <strong>not
+                        zero-sum</strong>. In Elo, if you gain 20 points your opponent loses 20.
+                        In TrueSkill, the total &mu; across all players tends to <strong>drift
+                        downward</strong> over time. This happens because:
+                    </p>
+                    <ul class="uploader-list">
+                        <li>
+                            <strong>Asymmetric sigma effects</strong> &mdash; when uncertainty
+                            decreases, it can pull the average &mu; down slightly.
+                        </li>
+                        <li>
+                            <strong>New player entry</strong> &mdash; new players start at 1000
+                            but quickly lose rating in their first games while they find their
+                            true level, dragging the overall average down.
+                        </li>
+                    </ul>
+                    <p>
+                        Left uncorrected, after hundreds of games the group average might sit at
+                        950 or lower, making everyone's rating look deflated.
+                    </p>
+                    <p>
+                        Our fix: we compute a <strong>cosmetic offset</strong> so the group
+                        average is always displayed as exactly 1000:
+                    </p>
+                    <p style="text-align:center; padding: 0.75rem; background: var(--bg-card); border: 1px solid var(--border);">
+                        <strong style="color: var(--gold-bright); font-family: var(--font-display); letter-spacing: 0.04em;">
+                            offset = 1000 &minus; average(&mu;<sub>scaled</sub>)
+                        </strong>
+                    </p>
+                    <p>
+                        This offset is applied to every displayed rating &mdash; leaderboard,
+                        charts, team generator, player profiles. But it <strong>never touches
+                        the underlying data</strong>. The raw &mu; and &sigma; values in the
+                        database and in TrueSkill calculations are untouched. Per-game rating
+                        deltas (&Delta;) are also unaffected, since the constant offset cancels
+                        out when computing differences.
+                    </p>
+                </div>
+
+                <div class="ornament">&#10022;</div>
+
+                <!-- ===== Handicap Processing ===== -->
+                <div class="uploader-section">
+                    <h3>Handicap Processing</h3>
+                    <p>
+                        Age of Empires II: Definitive Edition has a built-in handicap system
+                        that boosts a player's economy and production speed. It ranges from
+                        <strong>100%</strong> (normal) to <strong>200%</strong> (double
+                        economy), in <strong>5% increments</strong>.
+                    </p>
+                    <p>
+                        We extract each player's handicap value directly from the replay file
+                        for every game. The "Avg HC" column on the leaderboard shows the
+                        <strong>average handicap over a player's last 30 games</strong>:
+                    </p>
+                    <p style="text-align:center; padding: 0.75rem; background: var(--bg-card); border: 1px solid var(--border);">
+                        <strong style="color: var(--gold-bright); font-family: var(--font-display); letter-spacing: 0.04em;">
+                            Avg HC = sum(last 30 handicaps) &divide; 30
+                        </strong>
+                    </p>
+                    <p>
+                        This gives us a rolling view of what handicap each player has been
+                        <em>actually playing at</em> recently, which is the baseline for
+                        recommending future handicaps.
+                    </p>
+                </div>
+
+                <!-- ===== Recommended Handicap ===== -->
+                <div class="uploader-section">
+                    <h3>Recommended Handicap</h3>
+                    <p>
+                        The goal is simple: <strong>help weaker players compete more closely
+                        with stronger ones</strong>, without over-correcting. Here's how it
+                        works:
+                    </p>
+                    <p>
+                        We define a <strong>floor rating of 800</strong> &mdash; meaning 200
+                        points below the group average of 1000. Any player below this floor
+                        receives a handicap bump on top of what they're already using:
+                    </p>
+                    <p style="text-align:center; padding: 0.75rem; background: var(--bg-card); border: 1px solid var(--border);">
+                        <strong style="color: var(--gold-bright); font-family: var(--font-display); letter-spacing: 0.04em;">
+                            gap = 800 &minus; rating<br>
+                            adjustment = (gap &divide; 200) &times; 5%<br>
+                            recommended = current avg HC + adjustment
+                        </strong>
+                    </p>
+                    <p>
+                        The result is rounded to the nearest 5% (to match AoE2's increment)
+                        and clamped between 100% and 200%.
+                    </p>
+                    <p>
+                        In plain terms: <strong>every 200 rating points below the floor earns
+                        5% extra handicap</strong>. A few examples:
+                    </p>
+                    <ul class="uploader-list">
+                        <li>
+                            <strong>Rating 800, Avg HC 100%</strong> &mdash; gap is 0,
+                            adjustment is 0%. Recommended: <strong>100%</strong> (no change).
+                        </li>
+                        <li>
+                            <strong>Rating 700, Avg HC 100%</strong> &mdash; gap is 100,
+                            adjustment is 2.5%. Recommended: <strong>105%</strong> (rounds up).
+                        </li>
+                        <li>
+                            <strong>Rating 500, Avg HC 110%</strong> &mdash; gap is 300,
+                            adjustment is 7.5%. Recommended: <strong>120%</strong> (rounds up
+                            from 117.5%).
+                        </li>
+                        <li>
+                            <strong>Rating 1050, Avg HC 100%</strong> &mdash; above the floor,
+                            no change. Recommended: <strong>100%</strong>.
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- ===== Why Recentered Ratings Matter ===== -->
+                <div class="uploader-section">
+                    <h3>Why Re-centering Matters for Handicaps</h3>
+                    <p>
+                        The recommended handicap uses the <strong>re-centered rating</strong>
+                        (with the display offset applied), not the raw TrueSkill &mu;. This is
+                        crucial: the 800 floor was calibrated assuming the group average is
+                        1000. Without re-centering, as TrueSkill's average &mu; drifts downward,
+                        more and more players would fall below the floor and receive handicap
+                        bumps they don't actually need.
+                    </p>
+                    <p>
+                        By re-centering first, the floor always means "<strong>200 points below
+                        the group average</strong>" &mdash; regardless of how much TrueSkill's
+                        internal numbers have drifted. The system stays calibrated
+                        automatically.
+                    </p>
+                </div>
+
+                <div class="ornament">&#10022;</div>
+
+                <!-- ===== LAN Event Detection ===== -->
+                <div class="uploader-section">
+                    <h3>LAN Event Detection</h3>
+                    <p>
+                        The system automatically detects LAN party events from the replay data.
+                        It works by clustering games that happen close together in time:
+                    </p>
+                    <ul class="uploader-list">
+                        <li>
+                            Games are grouped by date. Consecutive dates with a
+                            <strong>gap of 2 days or less</strong> form a cluster.
+                        </li>
+                        <li>
+                            A cluster is recognized as a LAN event if at least one player
+                            participated in <strong>10 or more games</strong> during that
+                            period.
+                        </li>
+                        <li>
+                            Detected events appear in the rating evolution chart as shaded
+                            regions, and in the Awards tab where you can filter stats per event.
+                        </li>
+                    </ul>
                 </div>
             </div>
         </section>
