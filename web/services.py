@@ -257,29 +257,32 @@ def rebalance_teams(
 # --- API service functions ---
 
 
+def _enrich_matchup_handicaps(data: Dict[str, Any]) -> None:
+    """Add avg handicap badges to balanced_matchup award if players have HC > 100%."""
+    matchup = data.get("balanced_matchup")
+    if not matchup:
+        return
+    try:
+        ratings = {p["name"]: p for p in load_ratings()}
+        for key in ("team_a", "team_b"):
+            handicaps = {}
+            for name in matchup.get(key, []):
+                r = ratings.get(name)
+                if r:
+                    hc = round(r.get("avg_handicap_last_30", 100))
+                    if hc > 100:
+                        handicaps[name] = hc
+            if handicaps:
+                matchup[f"{key}_handicaps"] = handicaps
+    except FileNotFoundError:
+        pass
+
+
 def get_awards_for_api() -> Dict[str, Any]:
     data = db.load_analysis_cache(_get_db_path(), "awards")
     if data is None:
         raise FileNotFoundError("No awards data found in database")
-
-    # Enrich balanced matchup with avg handicaps
-    matchup = data.get("balanced_matchup")
-    if matchup:
-        try:
-            ratings = {p["name"]: p for p in load_ratings()}
-            for key in ("team_a", "team_b"):
-                handicaps = {}
-                for name in matchup.get(key, []):
-                    r = ratings.get(name)
-                    if r:
-                        hc = round(r.get("avg_handicap_last_30", 100))
-                        if hc > 100:
-                            handicaps[name] = hc
-                if handicaps:
-                    matchup[f"{key}_handicaps"] = handicaps
-        except FileNotFoundError:
-            pass
-
+    _enrich_matchup_handicaps(data)
     return data
 
 
@@ -559,7 +562,9 @@ def compute_event_awards(event_id: str) -> Optional[Dict[str, Any]]:
     filtered_games.sort(key=lambda g: g.get("datetime", ""))
 
     player_stats, game_stats, _, _ = accumulate_stats_from_games(filtered_games)
-    return compute_all_awards(player_stats, game_stats)
+    awards = compute_all_awards(player_stats, game_stats)
+    _enrich_matchup_handicaps(awards)
+    return awards
 
 
 # --- Upload & Rebuild ---
