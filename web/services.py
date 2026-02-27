@@ -24,6 +24,19 @@ def _get_db_path() -> str:
     return db.get_db_path(config.DATA_DIR)
 
 
+def _compute_rating_offset(ratings: List[Dict[str, Any]]) -> float:
+    """Compute offset to re-center average displayed rating to 1000.
+
+    TrueSkill is not zero-sum: average mu drifts downward over time.
+    This cosmetic offset keeps displayed ratings centered at 1000
+    without affecting the underlying TrueSkill calculations.
+    """
+    if not ratings:
+        return 0.0
+    avg = sum(r["mu_scaled"] for r in ratings) / len(ratings)
+    return 1000.0 - avg
+
+
 def _get_ts_env() -> trueskill.TrueSkill:
     return trueskill.TrueSkill(
         beta=config.TRUESKILL_BETA,
@@ -42,23 +55,24 @@ def _ratings_dict() -> Dict[str, Dict[str, Any]]:
     return {p["name"]: p for p in load_ratings()}
 
 
-def _player_info(data: Dict[str, Any]) -> Dict[str, Any]:
+def _player_info(data: Dict[str, Any], offset: float = 0.0) -> Dict[str, Any]:
     avg_hc = data.get("avg_handicap_last_30", 100)
     info = {
         "name": data["name"],
-        "mu_scaled": round(data["mu_scaled"], 1),
+        "mu_scaled": round(data["mu_scaled"] + offset, 1),
         "sigma_scaled": round(data["sigma_scaled"], 2),
         "games_played": data["games_played"],
         "games_rated": data.get("games_rated", data["games_played"]),
         "confidence_percent": round(data["confidence_percent"], 1),
         "avg_handicap_last_30": avg_hc,
-        "recommended_hc": recommended_handicap(data["mu_scaled"], avg_hc),
+        "recommended_hc": recommended_handicap(data["mu_scaled"] + offset, avg_hc),
     }
     return info
 
 
 def get_players_for_api() -> Dict[str, Any]:
     ratings = load_ratings()
+    offset = _compute_rating_offset(ratings)
     ranked = sorted(
         [
             r
@@ -78,8 +92,8 @@ def get_players_for_api() -> Dict[str, Any]:
         reverse=True,
     )
     return {
-        "ranked": [_player_info(p) for p in ranked],
-        "provisional": [_player_info(p) for p in provisional],
+        "ranked": [_player_info(p, offset) for p in ranked],
+        "provisional": [_player_info(p, offset) for p in provisional],
         "min_games_for_ranking": config.MIN_GAMES_FOR_RANKING,
     }
 
@@ -103,14 +117,15 @@ def _enrich_suggestion(
     ratings_data: Dict[str, Dict[str, Any]],
     player_ts_ratings: Dict[str, trueskill.Rating],
     ts_env: trueskill.TrueSkill,
+    offset: float = 0.0,
 ) -> Dict[str, Any]:
     def p_info(name):
         data = ratings_data[name]
         avg_hc = data.get("avg_handicap_last_30", 100)
         return {
             "name": name,
-            "rating": round(data["mu_scaled"], 1),
-            "recommended_hc": recommended_handicap(data["mu_scaled"], avg_hc),
+            "rating": round(data["mu_scaled"] + offset, 1),
+            "recommended_hc": recommended_handicap(data["mu_scaled"] + offset, avg_hc),
             "games_played": data["games_played"],
         }
 
@@ -162,7 +177,9 @@ def _enrich_suggestion(
 
 
 def generate_teams(player_names: List[str], top_n: int = 3) -> Dict[str, Any]:
-    ratings_data = _ratings_dict()
+    all_ratings = load_ratings()
+    offset = _compute_rating_offset(all_ratings)
+    ratings_data = {p["name"]: p for p in all_ratings}
 
     valid = []
     warnings = []
@@ -182,10 +199,10 @@ def generate_teams(player_names: List[str], top_n: int = 3) -> Dict[str, Any]:
     suggestions = []
     for quality, t1, t2, benched in balanced:
         enriched = _enrich_suggestion(
-            quality, t1, t2, ratings_data, player_ts_ratings, ts_env
+            quality, t1, t2, ratings_data, player_ts_ratings, ts_env, offset
         )
         enriched["benched"] = [
-            {"name": n, "rating": round(ratings_data[n]["mu_scaled"], 1)}
+            {"name": n, "rating": round(ratings_data[n]["mu_scaled"] + offset, 1)}
             for n in benched
         ]
         suggestions.append(enriched)
@@ -193,10 +210,27 @@ def generate_teams(player_names: List[str], top_n: int = 3) -> Dict[str, Any]:
     return {"suggestions": suggestions, "warnings": warnings}
 
 
+def _apply_offset_to_team_result(result: Dict[str, Any], offset: float) -> None:
+    """Apply display offset to avg rating values in rebalance results.
+
+    Player-level ratings and recommended_hc are already offset by
+    suggest_rebalances_data via its display_offset parameter.
+    Only team avg ratings (computed from raw mu_scaled) need offsetting here.
+    """
+    if not offset:
+        return
+    section = result.get("current_setup", {})
+    for avg_key in ("team1_avg_rating", "team2_avg_rating"):
+        if avg_key in section:
+            section[avg_key] = round(section[avg_key] + offset, 0)
+
+
 def rebalance_teams(
     team1: List[str], team2: List[str], weaker_team: int, top_n: int = 5
 ) -> Dict[str, Any]:
-    ratings_data = _ratings_dict()
+    all_ratings = load_ratings()
+    offset = _compute_rating_offset(all_ratings)
+    ratings_data = {p["name"]: p for p in all_ratings}
 
     all_names = list(set(team1 + team2))
     missing = [n for n in all_names if n not in ratings_data]
@@ -206,7 +240,7 @@ def rebalance_teams(
     ts_env = _get_ts_env()
     player_ts_ratings = _build_ts_ratings(all_names, ratings_data)
 
-    return suggest_rebalances_data(
+    result = suggest_rebalances_data(
         team1,
         team2,
         weaker_team,
@@ -214,7 +248,10 @@ def rebalance_teams(
         ratings_data,
         ts_env,
         top_n=top_n,
+        display_offset=offset,
     )
+    _apply_offset_to_team_result(result, offset)
+    return result
 
 
 # --- API service functions ---
@@ -345,17 +382,21 @@ def get_player_profile_for_api(name: str) -> Optional[Dict[str, Any]]:
 
     # Enrich with rating data
     try:
-        ratings_data = _ratings_dict()
+        all_ratings = load_ratings()
+        offset = _compute_rating_offset(all_ratings)
+        ratings_data = {p["name"]: p for p in all_ratings}
         canonical_name = profile["name"]
         if canonical_name in ratings_data:
             rd = ratings_data[canonical_name]
             avg_hc = rd.get("avg_handicap_last_30", 100)
             profile["rating"] = {
-                "mu_scaled": round(rd["mu_scaled"], 1),
+                "mu_scaled": round(rd["mu_scaled"] + offset, 1),
                 "sigma_scaled": round(rd["sigma_scaled"], 2),
                 "confidence_percent": round(rd["confidence_percent"], 1),
                 "avg_handicap_last_30": avg_hc,
-                "recommended_hc": recommended_handicap(rd["mu_scaled"], avg_hc),
+                "recommended_hc": recommended_handicap(
+                    rd["mu_scaled"] + offset, avg_hc
+                ),
             }
     except FileNotFoundError:
         pass
@@ -383,6 +424,12 @@ def get_rating_history_for_api() -> Dict[str, Any]:
     data = db.load_rating_history(_get_db_path())
     if not data or (not data.get("history") and not data.get("lan_events")):
         raise FileNotFoundError("No rating history found in database")
+    # Apply re-centering offset to chart mu values
+    ratings = load_ratings()
+    offset = _compute_rating_offset(ratings)
+    if offset:
+        for h in data["history"]:
+            h["mu"] = round(h["mu"] + offset, 2)
     return data
 
 

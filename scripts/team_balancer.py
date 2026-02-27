@@ -50,6 +50,7 @@ def suggest_rebalances_data(
     all_ratings_data: Dict[str, Dict[str, Any]],
     ts_env: trueskill.TrueSkill,
     top_n: int = 5,
+    display_offset: float = 0.0,
 ) -> Dict[str, Any]:
     """Return structured rebalance data instead of printing."""
     if weaker_team == 1:
@@ -70,10 +71,11 @@ def suggest_rebalances_data(
     def player_info(name):
         data = all_ratings_data[name]
         avg_hc = data.get("avg_handicap_last_30", 100)
+        display_rating = data["mu_scaled"] + display_offset
         return {
             "name": name,
-            "rating": data["mu_scaled"],
-            "recommended_hc": recommended_handicap(data["mu_scaled"], avg_hc),
+            "rating": display_rating,
+            "recommended_hc": recommended_handicap(display_rating, avg_hc),
             "games_played": data["games_played"],
         }
 

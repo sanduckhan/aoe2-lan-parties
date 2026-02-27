@@ -113,6 +113,7 @@ Each game entry contains:
 - **Team roster canonicalization**: Team matchups use sorted tuples of player names as dictionary keys to ensure consistent head-to-head tracking regardless of player order.
 - **Action-based stats**: Parsed from replay command stream (inputs/commands), not summary data. This includes units created, market transactions, wall segments, building deletions, and upgrade research.
 - **Fingerprint dedup**: Same game recorded by different players produces different SHA256s but identical fingerprints (based on datetime + player names + civs + teams). Only one copy is kept.
+- **Rating re-centering**: TrueSkill is not zero-sum — average mu drifts downward over time (asymmetric sigma effects, new player entry at 1000). The web API applies a cosmetic offset (`_compute_rating_offset()` in `services.py`) so displayed ratings average to 1000. The offset is applied to all display paths (leaderboard, charts, team generator, profiles) and to `recommended_handicap()` inputs. Raw mu/sigma values in the database and TrueSkill calculations are never modified. Rating deltas (per-game changes) are unaffected since the constant offset cancels out in differences.
 
 ### Server (`server/`)
 
@@ -135,12 +136,13 @@ Standalone utilities that import from `analyzer_lib/`.
 - AoE2 DE handicap: 100–200% in 5% increments, boosts economy and production.
 - The `player_ratings` table stores `avg_handicap_last_30` per player (from replay data via forked `mgz` library).
 - Recommended HC = current avg HC + bump for players below 700 rating floor, rounded to nearest 5%.
+- The 700 floor was calibrated for average=1000. The web API passes re-centered ratings (avg=1000) to `recommended_handicap()`, so the floor stays meaningful as "300 below group average" regardless of TrueSkill mu drift.
 - The `mgz` fork at `github.com/sanduckhan/aoc-mgz` (branch `feat/expose-handicap`) exposes `player.handicap` from replay files.
 
 ### Web UI (`web/`)
 
 - **app.py** — Flask routes serving the single-page HTML and JSON API endpoints (`/api/players`, `/api/teams/generate`, `/api/teams/rebalance`, `/api/games`, `/api/games/<sha256>/download`, `/api/awards`, `/api/stats`, `/api/player/<name>`, `/api/rating-history`, `/api/lan-events`, `/api/upload`, `/api/rebuild`, `/api/rebuild/status`).
-- **services.py** — Business logic bridge between Flask routes and `analyzer_lib`/scripts. Reads all data from SQLite via `analyzer_lib.db`. Handles player ratings, team generation, rebalance, game history, player profiles, LAN event awards, replay downloads, and upload processing.
+- **services.py** — Business logic bridge between Flask routes and `analyzer_lib`/scripts. Reads all data from SQLite via `analyzer_lib.db`. Handles player ratings, team generation, rebalance, game history, player profiles, LAN event awards, replay downloads, and upload processing. Applies cosmetic **rating re-centering** (`_compute_rating_offset()`) so the group average is always displayed as 1000 — TrueSkill's non-zero-sum mu drift is corrected at the display layer only. The offset is also passed to `recommended_handicap()` so the 700 floor stays calibrated relative to the group average.
 - **templates/index.html** — Single-page UI with tabs for Ratings, Awards, Battle Chronicles, Team Generator, Game View, and Uploader.
 - **static/app.js** — Client-side JavaScript for tab navigation, API calls, dynamic rendering, rating evolution chart (Chart.js), and sound effects.
 - **static/style.css** — Dark medieval-themed styling for the web interface.
