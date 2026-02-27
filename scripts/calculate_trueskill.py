@@ -522,7 +522,7 @@ def detect_lan_events(rating_history, min_player_games=10):
 def run_trueskill_from_registry(registry_games, data_dir=None):
     """Rebuild TrueSkill ratings from game registry entries.
 
-    Takes a list of game entries (only those with status "processed"),
+    Takes a list of game entries (status "processed" and "no_winner"),
     constructs lightweight GameData objects from registry metadata,
     sorts chronologically, processes through TrueSkillCalculator, and
     saves player_ratings.json and rating_history.json.
@@ -641,14 +641,14 @@ def main():
     from server.processing import GameRegistry
 
     registry = GameRegistry(data_dir=config.DATA_DIR)
-    processed_games = registry.get_games(status="processed")
-    if not processed_games:
+    ratable_games = registry.get_games(status=["processed", "no_winner"])
+    if not ratable_games:
         logging.error("No processed games in registry. Run main.py first.")
         return
     logging.info(
-        f"Running TrueSkill on {len(processed_games)} processed games from registry..."
+        f"Running TrueSkill on {len(ratable_games)} games from registry..."
     )
-    run_trueskill_from_registry(processed_games, data_dir=config.DATA_DIR)
+    run_trueskill_from_registry(ratable_games, data_dir=config.DATA_DIR)
     logging.info("Done.")
 
 

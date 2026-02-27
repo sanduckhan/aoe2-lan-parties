@@ -138,10 +138,20 @@ class GameRegistry:
         pass
 
     def get_games(self, status=None):
-        """Return games, optionally filtered by status, ordered by datetime."""
+        """Return games, optionally filtered by status, ordered by datetime.
+
+        Args:
+            status: None (all), a single status string, or a list of statuses.
+        """
         if status is None:
             rows = self._conn.execute(
                 "SELECT * FROM games ORDER BY datetime"
+            ).fetchall()
+        elif isinstance(status, list):
+            placeholders = ", ".join("?" for _ in status)
+            rows = self._conn.execute(
+                f"SELECT * FROM games WHERE status IN ({placeholders}) ORDER BY datetime",
+                status,
             ).fetchall()
         else:
             rows = self._conn.execute(
@@ -375,9 +385,11 @@ class IncrementalProcessor:
         try:
             rating_deltas = {}
             try:
-                processed_games = self._registry.get_games(status="processed")
+                ratable_games = self._registry.get_games(
+                    status=["processed", "no_winner"]
+                )
                 _, _, _, rating_deltas = run_trueskill_from_registry(
-                    processed_games, data_dir=self._data_dir
+                    ratable_games, data_dir=self._data_dir
                 )
             except Exception as e:
                 logger.error(f"TrueSkill rebuild failed: {e}")
@@ -523,9 +535,12 @@ class IncrementalProcessor:
         self._full_rebuild_progress["phase"] = "rebuilding_trueskill"
         rating_deltas = {}
         try:
-            processed_games = [g for g in new_games if g["status"] == "processed"]
+            ratable_games = [
+                g for g in new_games
+                if g["status"] in ("processed", "no_winner")
+            ]
             _, _, _, rating_deltas = run_trueskill_from_registry(
-                processed_games, data_dir=self._data_dir
+                ratable_games, data_dir=self._data_dir
             )
         except Exception as e:
             logger.error(f"TrueSkill rebuild during full rebuild failed: {e}")
