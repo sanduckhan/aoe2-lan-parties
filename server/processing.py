@@ -108,17 +108,21 @@ class GameRegistry:
         ).fetchone()
         return row is not None
 
-    def has_fingerprint(self, fingerprint):
-        """Check if a successfully processed game with this fingerprint already exists.
+    def get_fingerprint_status(self, fingerprint):
+        """Return the status of an existing game by fingerprint, or None if not found."""
+        if not fingerprint:
+            return None
+        row = self._conn.execute(
+            "SELECT status FROM games WHERE fingerprint = ? LIMIT 1", (fingerprint,)
+        ).fetchone()
+        return row[0] if row else None
 
-        Only matches 'processed' status — no_winner entries don't block re-uploads
-        of the completed version of the same game.
-        """
+    def has_fingerprint(self, fingerprint):
+        """Check if a game with this fingerprint already exists. O(1) via index."""
         if not fingerprint:
             return False
         row = self._conn.execute(
-            "SELECT 1 FROM games WHERE fingerprint = ? AND status = 'processed' LIMIT 1",
-            (fingerprint,),
+            "SELECT 1 FROM games WHERE fingerprint = ? LIMIT 1", (fingerprint,)
         ).fetchone()
         return row is not None
 
@@ -306,16 +310,25 @@ class IncrementalProcessor:
             }
 
         # --- Fingerprint dedup (same game recorded by different players) ---
+        # A 'processed' entry always wins over a 'no_winner' entry (handles the case
+        # where a paused game was uploaded earlier as no_winner, then the completed
+        # game is uploaded — the completed version should succeed).
+        # A 'no_winner' entry is still blocked by an existing no_winner (normal dedup).
         fingerprint = entry.get("fingerprint")
-        if fingerprint and self._registry.has_fingerprint(fingerprint):
-            self._schedule_rebuild()
-            return {
-                "status": "duplicate",
-                "sha256": sha256,
-                "filename": entry["filename"],
-                "datetime": entry["datetime"],
-                "message": "This game was already uploaded by another player.",
-            }
+        if fingerprint:
+            existing_fp_status = self._registry.get_fingerprint_status(fingerprint)
+            is_duplicate = existing_fp_status is not None and not (
+                entry["status"] == "processed" and existing_fp_status == "no_winner"
+            )
+            if is_duplicate:
+                self._schedule_rebuild()
+                return {
+                    "status": "duplicate",
+                    "sha256": sha256,
+                    "filename": entry["filename"],
+                    "datetime": entry["datetime"],
+                    "message": "This game was already uploaded by another player.",
+                }
 
         # --- Store in bucket (non-critical) ---
         if self._storage:
