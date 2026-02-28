@@ -147,6 +147,26 @@ class GameRegistry:
         if entry.get("status") == "processed":
             self._update_metadata("total_processed", self._get_processed_count())
 
+    def set_winner(self, sha256, winning_team_id):
+        """Override winner for a no_winner game, promoting it to processed."""
+        row = self._conn.execute(
+            "SELECT teams FROM games WHERE sha256 = ?", (sha256,)
+        ).fetchone()
+        if not row:
+            return False
+        teams = json.loads(row[0])
+        for tid, players in teams.items():
+            for p in players:
+                p["winner"] = tid == str(winning_team_id)
+        self._conn.execute(
+            "UPDATE games SET status = 'processed', winning_team_id = ?, teams = ? "
+            "WHERE sha256 = ?",
+            (str(winning_team_id), json.dumps(teams), sha256),
+        )
+        self._conn.commit()
+        self._update_metadata("total_processed", self._get_processed_count())
+        return True
+
     def update_source_path(self, sha256, source_path):
         """Set source_path on an existing entry (backfill for download support)."""
         cursor = self._conn.execute(

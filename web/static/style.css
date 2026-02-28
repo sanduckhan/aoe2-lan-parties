@@ -2942,6 +2942,49 @@ body.modal-open {
     border-color: var(--red-bright);
 }
 
+.btn-set-winner {
+    background: rgba(106, 158, 85, 0.15);
+    color: var(--green-bright);
+    border-color: var(--green);
+}
+
+.btn-set-winner:hover:not(:disabled) {
+    background: rgba(106, 158, 85, 0.3);
+    border-color: var(--green-bright);
+}
+
+.admin-team-group {
+    white-space: nowrap;
+}
+
+.admin-team-label {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--gold);
+    background: var(--bg-elevated);
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    margin-right: 0.3rem;
+    vertical-align: baseline;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.admin-team-vs {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin: 0 0.15rem;
+}
+
+.admin-actions-cell {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    align-items: center;
+}
+
 .admin-error {
     color: var(--red-bright);
     margin-top: 0.75rem;

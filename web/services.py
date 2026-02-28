@@ -751,6 +751,29 @@ def delete_admin_game(sha256: str) -> Dict[str, Any]:
     return {"status": "deleted", "sha256": sha256}
 
 
+def set_admin_game_winner(sha256: str, winning_team_id: str) -> Dict[str, Any]:
+    """Override winner for a no_winner game, promoting it to processed."""
+    registry = _get_registry()
+    entry = registry.get_game_by_sha256(sha256)
+    if entry is None:
+        return {"error": "Game not found"}
+    if entry["status"] != "no_winner":
+        return {"error": f"Game status is '{entry['status']}', expected 'no_winner'"}
+
+    teams = entry.get("teams", {})
+    if str(winning_team_id) not in teams:
+        valid_ids = ", ".join(sorted(teams.keys()))
+        return {"error": f"Invalid team id '{winning_team_id}'. Valid: {valid_ids}"}
+
+    registry.set_winner(sha256, winning_team_id)
+
+    # Trigger rebuild so TrueSkill and stats include this game
+    processor = _get_processor()
+    processor._schedule_rebuild()
+
+    return {"status": "updated", "sha256": sha256, "winning_team_id": str(winning_team_id)}
+
+
 def admin_sync_from_disk() -> Dict[str, Any]:
     """Scan local replay directory for new files and add to registry."""
     from analyzer_lib.registry_builder import sync_registry_from_disk

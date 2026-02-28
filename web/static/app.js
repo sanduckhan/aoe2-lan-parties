@@ -1773,9 +1773,27 @@ async function adminFetchGames() {
 
         for (const g of data.games) {
             const teams = g.teams || {};
-            const players = Object.values(teams).flat().join(', ') || 'N/A';
+            const teamEntries = Object.entries(teams);
+            const players = teamEntries.length > 0
+                ? teamEntries.map(([tid, names]) => `<span class="admin-team-group"><span class="admin-team-label">T${tid}</span>${names.join(', ')}</span>`).join(' <span class="admin-team-vs">vs</span> ')
+                : 'N/A';
             const dur = g.duration_seconds ? `${Math.round(g.duration_seconds / 60)}m` : '-';
             const date = g.datetime ? g.datetime.slice(0, 16).replace('T', ' ') : 'N/A';
+
+            // Build actions cell
+            let actions = '';
+            if (g.status === 'no_winner' && Object.keys(teams).length > 0) {
+                const teamEntries = Object.entries(teams);
+                for (const [tid, names] of teamEntries) {
+                    const label = names.join(', ');
+                    actions += `<button class="btn-admin btn-admin-sm btn-set-winner" `
+                        + `onclick="adminSetWinner('${g.sha256}', '${tid}')" `
+                        + `title="Set Team ${tid} as winner: ${label}">`
+                        + `T${tid} wins</button> `;
+                }
+            }
+            actions += `<button class="btn-admin btn-admin-sm btn-danger" onclick="adminDeleteGame('${g.sha256}')">Delete</button>`;
+
             html += `<tr>
                 <td class="admin-sha" title="${g.sha256}">${g.sha256.slice(0, 12)}...</td>
                 <td>${g.filename || 'N/A'}</td>
@@ -1783,7 +1801,7 @@ async function adminFetchGames() {
             if (showStatus) html += `<td><span class="admin-status-tag admin-status-${g.status}">${g.status}</span></td>`;
             html += `<td>${dur}</td>
                 <td>${players}</td>
-                <td><button class="btn-admin btn-admin-sm btn-danger" onclick="adminDeleteGame('${g.sha256}')">Delete</button></td>
+                <td class="admin-actions-cell">${actions}</td>
             </tr>`;
         }
 
@@ -1816,6 +1834,31 @@ async function adminDeleteGame(sha256) {
         adminFetchHealth();
     } catch (err) {
         alert('Delete request failed.');
+        console.error(err);
+    }
+}
+
+async function adminSetWinner(sha256, teamId) {
+    if (!confirm(`Set Team ${teamId} as winner for game ${sha256.slice(0, 12)}...?`)) return;
+
+    try {
+        const res = await fetch(`/api/admin/games/${sha256}/set-winner`, {
+            method: 'POST',
+            headers: adminHeaders(),
+            body: JSON.stringify({ winning_team_id: teamId }),
+        });
+        if (res.status === 401) { adminLogout(); return; }
+        const data = await res.json();
+
+        if (data.error) {
+            alert(`Error: ${data.error}`);
+            return;
+        }
+
+        adminFetchGames();
+        adminFetchHealth();
+    } catch (err) {
+        alert('Set winner request failed.');
         console.error(err);
     }
 }

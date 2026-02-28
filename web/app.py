@@ -269,6 +269,18 @@ def api_admin_delete_game(sha256):
     return jsonify(result), 200
 
 
+@app.route("/api/admin/games/<sha256>/set-winner", methods=["POST"])
+@require_api_key
+def api_admin_set_winner(sha256):
+    data = request.get_json()
+    if not data or "winning_team_id" not in data:
+        return jsonify({"error": "winning_team_id is required"}), 400
+    result = services.set_admin_game_winner(sha256, data["winning_team_id"])
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result), 200
+
+
 @app.route("/api/admin/sync-from-disk", methods=["POST"])
 @require_api_key
 def api_admin_sync_from_disk():
