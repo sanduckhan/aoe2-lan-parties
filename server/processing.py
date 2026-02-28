@@ -109,11 +109,16 @@ class GameRegistry:
         return row is not None
 
     def has_fingerprint(self, fingerprint):
-        """Check if a game with this fingerprint already exists. O(1) via index."""
+        """Check if a successfully processed game with this fingerprint already exists.
+
+        Only matches 'processed' status — no_winner entries don't block re-uploads
+        of the completed version of the same game.
+        """
         if not fingerprint:
             return False
         row = self._conn.execute(
-            "SELECT 1 FROM games WHERE fingerprint = ? LIMIT 1", (fingerprint,)
+            "SELECT 1 FROM games WHERE fingerprint = ? AND status = 'processed' LIMIT 1",
+            (fingerprint,),
         ).fetchone()
         return row is not None
 
