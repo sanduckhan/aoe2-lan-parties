@@ -95,6 +95,7 @@ def extract_single_game_deltas(match_obj, human_players):
 
                 payload = getattr(input_action, "payload", {})
                 unit_name = payload.get("unit")
+                amount = payload.get("amount", 1) or 1
 
                 if (
                     unit_name
@@ -102,9 +103,9 @@ def extract_single_game_deltas(match_obj, human_players):
                     and unit_name not in config.NON_MILITARY_UNITS
                 ):
                     if current_player in player_deltas:
-                        player_deltas[current_player]["units_created"][unit_name] += 1
-                        player_deltas[current_player]["total_units_created"] += 1
-                        total_units_created_overall += 1
+                        player_deltas[current_player]["units_created"][unit_name] += amount
+                        player_deltas[current_player]["total_units_created"] += amount
+                        total_units_created_overall += amount
 
             elif input_type_name in ["Buy", "Sell"]:
                 if action_player_name and action_player_name in player_deltas:

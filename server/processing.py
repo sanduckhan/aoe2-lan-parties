@@ -126,6 +126,20 @@ class GameRegistry:
         ).fetchone()
         return row is not None
 
+    def get_sha256_by_fingerprint(self, fingerprint):
+        """Return the SHA256 of an existing game by fingerprint, or None."""
+        if not fingerprint:
+            return None
+        row = self._conn.execute(
+            "SELECT sha256 FROM games WHERE fingerprint = ? LIMIT 1", (fingerprint,)
+        ).fetchone()
+        return row[0] if row else None
+
+    def delete_game(self, sha256):
+        """Delete a game entry by SHA256."""
+        self._conn.execute("DELETE FROM games WHERE sha256 = ?", (sha256,))
+        self._conn.commit()
+
     def add_game(self, entry):
         """Insert a game entry into the database."""
         self._conn.execute(_GAME_INSERT_SQL, _entry_to_row(entry))
@@ -329,6 +343,14 @@ class IncrementalProcessor:
                     "datetime": entry["datetime"],
                     "message": "This game was already uploaded by another player.",
                 }
+
+        # If a processed entry supersedes an existing no_winner, delete the old one
+        # so the DB doesn't accumulate duplicate fingerprints.
+        if fingerprint and existing_fp_status == "no_winner" and entry["status"] == "processed":
+            old_sha256 = self._registry.get_sha256_by_fingerprint(fingerprint)
+            if old_sha256:
+                logger.info(f"Superseding no_winner {old_sha256} with processed {sha256}")
+                self._registry.delete_game(old_sha256)
 
         # --- Store in bucket (non-critical) ---
         if self._storage:
@@ -598,7 +620,25 @@ def rebuild_analysis_from_registry(registry, data_dir=None, rating_deltas=None):
     analysis_games = [
         g for g in all_games if g.get("status") in ("processed", "no_winner")
     ]
-    analysis_games.sort(key=lambda g: g.get("datetime", ""))
+
+    # Fingerprint dedup: if the same game exists as both no_winner and processed
+    # (e.g. uploaded by two players), keep only the processed version.
+    fp_best = {}
+    no_fp_games = []
+    for g in analysis_games:
+        fp = g.get("fingerprint")
+        if not fp:
+            no_fp_games.append(g)
+            continue
+        existing = fp_best.get(fp)
+        if existing is None or (
+            g["status"] == "processed" and existing["status"] == "no_winner"
+        ):
+            fp_best[fp] = g
+    analysis_games = sorted(
+        list(fp_best.values()) + no_fp_games,
+        key=lambda g: g.get("datetime", ""),
+    )
 
     player_stats, game_stats, game_results, head_to_head = accumulate_stats_from_games(
         analysis_games
