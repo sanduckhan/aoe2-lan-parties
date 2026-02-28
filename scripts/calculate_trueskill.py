@@ -202,15 +202,6 @@ class TrueSkillCalculator:
         else:
             ranks = [1, 0]
 
-        num_players_team1 = len(team1_player_objs)
-        num_players_team2 = len(team2_player_objs)
-
-        if num_players_team1 != num_players_team2:
-            logging.info(
-                f"Game {game_data.filename} has unbalanced teams: "
-                f"{num_players_team1} vs {num_players_team2}."
-            )
-
         deltas = {}
         try:
             new_ratings_by_team = self.ts_env.rate(

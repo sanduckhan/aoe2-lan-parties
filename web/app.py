@@ -237,3 +237,42 @@ def api_rebuild():
 @require_api_key
 def api_rebuild_status():
     return jsonify(services.get_rebuild_status()), 200
+
+
+# --- Admin endpoints (API key required) ---
+
+
+@app.route("/api/admin/health")
+@require_api_key
+def api_admin_health():
+    return jsonify(services.get_admin_health()), 200
+
+
+@app.route("/api/admin/games")
+@require_api_key
+def api_admin_games():
+    status = request.args.get("status", "").strip()
+    if not status:
+        return jsonify({"error": "status query parameter is required"}), 400
+    result = services.get_admin_games(status)
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result), 200
+
+
+@app.route("/api/admin/games/<sha256>", methods=["DELETE"])
+@require_api_key
+def api_admin_delete_game(sha256):
+    result = services.delete_admin_game(sha256)
+    if "error" in result:
+        return jsonify(result), 404
+    return jsonify(result), 200
+
+
+@app.route("/api/admin/sync-from-disk", methods=["POST"])
+@require_api_key
+def api_admin_sync_from_disk():
+    result = services.admin_sync_from_disk()
+    if "error" in result:
+        return jsonify(result), 500
+    return jsonify(result), 200

@@ -367,9 +367,7 @@ def get_games_paginated(
             g
             for g in formatted
             if any(
-                q in p["name"].lower()
-                for team in g["teams"]
-                for p in team["players"]
+                q in p["name"].lower() for team in g["teams"] for p in team["players"]
             )
         ]
 
@@ -650,3 +648,112 @@ def get_rebuild_status() -> Dict[str, Any]:
     """Return current full rebuild progress."""
     processor = _get_processor()
     return processor.full_rebuild_status
+
+
+# --- Admin ---
+
+
+def get_admin_health() -> Dict[str, Any]:
+    """Return registry health summary for the admin dashboard."""
+    registry = _get_registry()
+    conn = registry._conn
+
+    # Game counts by status
+    rows = conn.execute(
+        "SELECT status, COUNT(*) as cnt FROM games GROUP BY status"
+    ).fetchall()
+    status_counts = {r["status"]: r["cnt"] for r in rows}
+    total_games = sum(status_counts.values())
+
+    # Date range of processed/no_winner games
+    date_row = conn.execute(
+        "SELECT MIN(datetime) as earliest, MAX(datetime) as latest "
+        "FROM games WHERE status IN ('processed', 'no_winner') AND datetime != ''"
+    ).fetchone()
+    date_range = {
+        "earliest": date_row["earliest"] or "",
+        "latest": date_row["latest"] or "",
+    }
+
+    # Player count from ratings table
+    player_row = conn.execute("SELECT COUNT(*) as cnt FROM player_ratings").fetchone()
+    total_players = player_row["cnt"]
+
+    # DB file size
+    db_path = registry.db_path
+    db_size_mb = (
+        round(os.path.getsize(db_path) / (1024 * 1024), 1)
+        if os.path.isfile(db_path)
+        else 0
+    )
+
+    # Metadata
+    last_updated = registry._get_metadata("last_updated") or ""
+
+    processor = _get_processor()
+
+    return {
+        "total_games": total_games,
+        "status_counts": status_counts,
+        "total_players": total_players,
+        "date_range": date_range,
+        "last_updated": last_updated,
+        "rebuild_pending": processor.rebuild_pending,
+        "db_size_mb": db_size_mb,
+    }
+
+
+def get_admin_games(status: str) -> Dict[str, Any]:
+    """Return games filtered by status for the admin game management view."""
+    valid_statuses = (
+        "all",
+        "parse_error",
+        "no_winner",
+        "too_short",
+        "unknown_player",
+        "duplicate",
+        "processed",
+    )
+    if status not in valid_statuses:
+        return {"error": f"Invalid status. Must be one of: {', '.join(valid_statuses)}"}
+
+    registry = _get_registry()
+    games = registry.get_games(status=None if status == "all" else status)
+
+    result = []
+    for g in games:
+        teams_summary = {}
+        for tid, players in g.get("teams", {}).items():
+            teams_summary[tid] = [p.get("name", "?") for p in players]
+        result.append(
+            {
+                "sha256": g["sha256"],
+                "filename": g.get("filename", ""),
+                "datetime": g.get("datetime", ""),
+                "status": g["status"],
+                "duration_seconds": g.get("duration_seconds", 0),
+                "teams": teams_summary,
+            }
+        )
+
+    result.sort(key=lambda g: g.get("datetime", ""), reverse=True)
+    return {"games": result, "total": len(result)}
+
+
+def delete_admin_game(sha256: str) -> Dict[str, Any]:
+    """Delete a single game entry from the registry."""
+    registry = _get_registry()
+    entry = registry.get_game_by_sha256(sha256)
+    if entry is None:
+        return {"error": "Game not found"}
+
+    registry.delete_game(sha256)
+    return {"status": "deleted", "sha256": sha256}
+
+
+def admin_sync_from_disk() -> Dict[str, Any]:
+    """Scan local replay directory for new files and add to registry."""
+    from analyzer_lib.registry_builder import sync_registry_from_disk
+
+    registry = _get_registry()
+    return sync_registry_from_disk(registry)

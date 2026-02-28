@@ -312,7 +312,11 @@ class IncrementalProcessor:
 
         # For non-success statuses, register and return early
         if entry["status"] in ("parse_error", "too_short", "unknown_player"):
-            # For parse errors with specific messages, store them
+            logger.warning(
+                f"Upload not counted [{entry['status']}]: "
+                f"{entry.get('filename', sha256[:12])} "
+                f"(sha256={sha256[:12]})"
+            )
             self._registry.add_game(entry)
             self._schedule_rebuild()
             return {
@@ -335,6 +339,12 @@ class IncrementalProcessor:
                 entry["status"] == "processed" and existing_fp_status == "no_winner"
             )
             if is_duplicate:
+                logger.info(
+                    f"Upload not counted [duplicate]: "
+                    f"{entry.get('filename', sha256[:12])} — "
+                    f"already uploaded by another player "
+                    f"(sha256={sha256[:12]})"
+                )
                 self._schedule_rebuild()
                 return {
                     "status": "duplicate",
@@ -361,6 +371,18 @@ class IncrementalProcessor:
 
         # --- Register in registry ---
         self._registry.add_game(entry)
+
+        if entry["status"] == "no_winner":
+            teams_dict = entry.get("teams", {})
+            player_names = [
+                p["name"] for players in teams_dict.values() for p in players
+            ]
+            logger.warning(
+                f"Upload not counted [no_winner]: "
+                f"{entry.get('filename', sha256[:12])} — "
+                f"players: {', '.join(player_names)} "
+                f"(sha256={sha256[:12]})"
+            )
 
         # --- Schedule deferred rebuild ---
         self._schedule_rebuild()

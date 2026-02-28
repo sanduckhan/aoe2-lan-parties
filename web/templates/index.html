@@ -43,6 +43,7 @@
                 <div class="nav-divider"></div>
                 <button class="tab tab-utility" data-tab="methodology">&#9881; Methodology</button>
                 <button class="tab tab-utility" data-tab="uploader">&#8681; Uploader</button>
+                <button class="tab tab-utility" data-tab="admin">&#9881; Admin</button>
             </div>
         </nav>
     </header>
@@ -624,6 +625,76 @@
                         <li><strong>SmartScreen blocks the app</strong> &mdash; Click "More info" &rarr; "Run anyway". The exe is unsigned but safe.</li>
                         <li><strong>Replays not detected</strong> &mdash; Verify the replay folder path in the uploader settings matches where AoE2:DE saves your recordings.</li>
                     </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Admin Tab -->
+        <section id="admin" class="tab-content">
+            <!-- Auth gate -->
+            <div id="admin-auth" class="admin-auth">
+                <div class="section-header">
+                    <h2>Admin Console</h2>
+                    <p class="section-desc">Enter the API key to access admin operations</p>
+                </div>
+                <div class="admin-auth-form">
+                    <input type="password" id="admin-key-input" placeholder="API Key" class="admin-input" autocomplete="off">
+                    <button onclick="adminLogin()" class="btn-admin">Authenticate</button>
+                </div>
+                <div id="admin-auth-error" class="admin-error" style="display:none"></div>
+            </div>
+
+            <!-- Dashboard (hidden until auth) -->
+            <div id="admin-dashboard" style="display:none">
+                <div class="section-header">
+                    <h2>Admin Console</h2>
+                    <p class="section-desc">Registry health and operational controls</p>
+                </div>
+
+                <!-- Health Cards -->
+                <div id="admin-health-loading" class="loading-state">
+                    <div class="loading-text">Loading health data...</div>
+                </div>
+                <div id="admin-health-cards" class="admin-cards" style="display:none"></div>
+
+                <!-- Actions -->
+                <div class="admin-section">
+                    <h3>Operations</h3>
+                    <div class="admin-actions">
+                        <div class="admin-action-card">
+                            <h4>Full Rebuild from Bucket</h4>
+                            <p>Re-download all replays from storage, re-parse, and rebuild ratings &amp; stats.</p>
+                            <button onclick="adminFullRebuild()" class="btn-admin" id="admin-rebuild-btn">Start Full Rebuild</button>
+                            <div id="admin-rebuild-status" style="display:none"></div>
+                        </div>
+                        <div class="admin-action-card">
+                            <h4>Sync from Disk</h4>
+                            <p>Scan the local replay directory for new files and add them to the registry.</p>
+                            <button onclick="adminSyncFromDisk()" class="btn-admin" id="admin-sync-btn">Sync Now</button>
+                            <div id="admin-sync-result" style="display:none"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Non-processed Games -->
+                <div class="admin-section">
+                    <h3>Game Management</h3>
+                    <div class="admin-filter-row">
+                        <label for="admin-status-filter">Filter by status:</label>
+                        <select id="admin-status-filter" onchange="adminFetchGames()" class="admin-select">
+                            <option value="all" selected>All</option>
+                            <option value="processed">Processed</option>
+                            <option value="parse_error">Parse Errors</option>
+                            <option value="no_winner">No Winner</option>
+                            <option value="too_short">Too Short</option>
+                            <option value="unknown_player">Unknown Player</option>
+                            <option value="duplicate">Duplicate</option>
+                        </select>
+                    </div>
+                    <div id="admin-games-loading" class="loading-state" style="display:none">
+                        <div class="loading-text">Loading games...</div>
+                    </div>
+                    <div id="admin-games-container"></div>
                 </div>
             </div>
         </section>
