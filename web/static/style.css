@@ -2942,6 +2942,20 @@ body.modal-open {
     border-color: var(--red-bright);
 }
 
+.btn-download {
+    background: rgba(180, 170, 120, 0.15);
+    color: var(--gold);
+    border-color: var(--gold-dark);
+    text-decoration: none;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.btn-download:hover {
+    background: rgba(180, 170, 120, 0.3);
+    border-color: var(--gold);
+}
+
 .btn-set-winner {
     background: rgba(106, 158, 85, 0.15);
     color: var(--green-bright);

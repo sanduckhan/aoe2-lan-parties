@@ -1792,6 +1792,7 @@ async function adminFetchGames() {
                         + `T${tid} wins</button> `;
                 }
             }
+            actions += `<a class="btn-admin btn-admin-sm btn-download" href="/api/games/${g.sha256}/download" title="Download replay">&#8681;</a>`;
             actions += `<button class="btn-admin btn-admin-sm btn-danger" onclick="adminDeleteGame('${g.sha256}')">Delete</button>`;
 
             html += `<tr>
