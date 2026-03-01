@@ -169,6 +169,7 @@ function useSetup(suggestion) {
     state.ratingChanges = suggestion.rating_changes || {};
     state.matchQuality = suggestion.match_quality;
     state.expectedWinner = suggestion.expected_winner;
+    saveTeamState();
     navigateTo('game');
     renderGameView();
 }
@@ -322,6 +323,7 @@ function confirmManualSetup() {
     state.ratingChanges = {};
     state.matchQuality = null;
     state.expectedWinner = null;
+    saveTeamState();
     renderGameView();
 }
 
@@ -404,6 +406,7 @@ function applyRebalance(suggestion) {
     state.ratingChanges = {};
     state.matchQuality = suggestion.match_quality;
     state.expectedWinner = null;
+    saveTeamState();
     renderGameView();
 }
 

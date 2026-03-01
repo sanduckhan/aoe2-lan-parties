@@ -50,6 +50,38 @@ var state = {
     manualAssignments: {},
 };
 
+// ---- Persist team selections across refreshes ----
+var TEAM_STATE_KEY = 'aoe2_team_state';
+
+function saveTeamState() {
+    try {
+        localStorage.setItem(TEAM_STATE_KEY, JSON.stringify({
+            currentTeam1: state.currentTeam1,
+            currentTeam2: state.currentTeam2,
+            benched: state.benched,
+            ratingChanges: state.ratingChanges,
+            matchQuality: state.matchQuality,
+            expectedWinner: state.expectedWinner,
+        }));
+    } catch (e) { /* ignore quota errors */ }
+}
+
+function restoreTeamState() {
+    try {
+        const raw = localStorage.getItem(TEAM_STATE_KEY);
+        if (!raw) return false;
+        const saved = JSON.parse(raw);
+        if (!saved.currentTeam1 || saved.currentTeam1.length === 0) return false;
+        state.currentTeam1 = saved.currentTeam1;
+        state.currentTeam2 = saved.currentTeam2;
+        state.benched = saved.benched || [];
+        state.ratingChanges = saved.ratingChanges || {};
+        state.matchQuality = saved.matchQuality;
+        state.expectedWinner = saved.expectedWinner;
+        return true;
+    } catch (e) { return false; }
+}
+
 // ---- Tab switching & hash routing ----
 var awardsFetched = false;
 var historyFetched = false;
@@ -99,6 +131,9 @@ function switchTab(tabId) {
     if (tabId === 'history' && !historyFetched) {
         historyFetched = true;
         fetchGameHistory();
+    }
+    if (tabId === 'game' && state.currentTeam1.length === 0) {
+        if (restoreTeamState()) renderGameView();
     }
     if (tabId === 'admin') {
         adminOnTabOpen();
