@@ -145,7 +145,8 @@ function renderAwards(data) {
         const m = data.balanced_matchup;
         const fmtTeam = (names, hcMap) => names.map(n => {
             const hc = hcMap && hcMap[n];
-            return hc ? `${n} <span class="gc-hc">(${Math.round(hc)}%)</span>` : n;
+            const link = `<a class="player-link" onclick="openPlayerProfile('${n}')">${n}</a>`;
+            return hc ? `${link} <span class="gc-hc">(${Math.round(hc)}%)</span>` : link;
         }).join(', ');
         const card = document.createElement('div');
         card.className = 'award-card award-card-wide';

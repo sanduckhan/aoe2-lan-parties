@@ -173,7 +173,7 @@ class TrueSkillCalculator:
         return self.player_ratings[player_name]
 
     def update_ratings_for_game(
-        self, game_data: GameData, game_index: int
+        self, game_data: GameData, game_index: int, sha256: str = ""
     ) -> Dict[str, float]:
         """Update ratings for all players in a game.
 
@@ -249,6 +249,7 @@ class TrueSkillCalculator:
                         * config.TRUESKILL_ELO_SCALING_FACTOR,
                         "handicap": handicap,
                         "datetime": game_data.datetime_obj,
+                        "sha256": sha256,
                     }
                 )
 
@@ -560,7 +561,7 @@ def run_trueskill_from_registry(registry_games, data_dir=None):
             continue
 
         game_index_rated += 1
-        deltas = calculator.update_ratings_for_game(game_data, game_index_rated)
+        deltas = calculator.update_ratings_for_game(game_data, game_index_rated, sha256=game_data.sha256)
         if game_data.sha256 and deltas:
             rating_deltas[game_data.sha256] = deltas
 
@@ -607,6 +608,7 @@ def run_trueskill_from_registry(registry_games, data_dir=None):
             "player_name": h["player_name"],
             "mu": round(h["mu"], 2),
             "sigma": round(h["sigma"], 2),
+            "sha256": h.get("sha256", ""),
         }
         for h in calculator.rating_history
     ]

@@ -352,6 +352,7 @@ def get_games_paginated(
     limit: int = 30,
     search: str = "",
     sort: str = "desc",
+    sha256: str = "",
 ) -> Dict[str, Any]:
     """Return paginated, searchable game results with streaks."""
     games = db.load_analysis_cache(_get_db_path(), "game_results")
@@ -361,13 +362,27 @@ def get_games_paginated(
     formatted = _format_game_results(games)
     _compute_streaks(formatted)
 
+    # Direct lookup by sha256 — short-circuit pagination/search
+    if sha256:
+        match = [g for g in formatted if g.get("sha256") == sha256]
+        return {
+            "games": match,
+            "total": len(match),
+            "has_more": False,
+        }
+
     if search:
-        q = search.lower()
+        terms = search.lower().split()
         formatted = [
             g
             for g in formatted
-            if any(
-                q in p["name"].lower() for team in g["teams"] for p in team["players"]
+            if all(
+                any(
+                    term in p["name"].lower()
+                    for team in g["teams"]
+                    for p in team["players"]
+                )
+                for term in terms
             )
         ]
 
@@ -501,6 +516,45 @@ def get_player_profile_for_api(name: str) -> Optional[Dict[str, Any]]:
             profile["trend"] = 0
     except FileNotFoundError:
         profile["trend"] = 0
+
+    # Enrich with recent games
+    try:
+        game_results = db.load_analysis_cache(_get_db_path(), "game_results")
+        if game_results:
+            formatted = _format_game_results(game_results)
+            # Filter to games this player participated in
+            player_games = [
+                g
+                for g in formatted
+                if any(
+                    p["name"] == profile["name"]
+                    for team in g["teams"]
+                    for p in team["players"]
+                )
+            ]
+            # Last 5 games (formatted is chronological, take from end)
+            recent = player_games[-5:]
+            recent.reverse()
+            profile["recent_games"] = [
+                {
+                    "sha256": g.get("sha256", ""),
+                    "datetime": g["datetime"],
+                    "duration_display": g["duration_display"],
+                    "won": any(
+                        p["name"] == profile["name"]
+                        for team in g["teams"]
+                        if team["is_winner"]
+                        for p in team["players"]
+                    ),
+                    "teams_summary": " vs ".join(
+                        ", ".join(p["name"] for p in team["players"])
+                        for team in g["teams"]
+                    ),
+                }
+                for g in recent
+            ]
+    except Exception:
+        pass
 
     return profile
 

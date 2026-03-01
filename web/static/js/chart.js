@@ -20,11 +20,20 @@ async function fetchRatingHistory() {
     } catch (err) { console.error(err); }
 }
 
+// Map game_index -> sha256 for chart click navigation
+var chartGameIndexSha = {};
+
 function renderRatingChart(history, lanEvents) {
+    chartGameIndexSha = {};
     const playerData = {};
+    // Track previous mu per player to compute delta
+    const prevMu = {};
     history.forEach(h => {
         if (!playerData[h.player_name]) playerData[h.player_name] = [];
-        playerData[h.player_name].push({ x: h.game_index, y: Math.round(h.mu) });
+        const delta = prevMu[h.player_name] != null ? Math.round(h.mu) - prevMu[h.player_name] : null;
+        prevMu[h.player_name] = Math.round(h.mu);
+        playerData[h.player_name].push({ x: h.game_index, y: Math.round(h.mu), sha256: h.sha256 || '', delta });
+        if (h.sha256) chartGameIndexSha[h.game_index] = h.sha256;
     });
 
     const datasets = Object.entries(playerData).map(([name, points], i) => ({
@@ -83,6 +92,13 @@ function renderRatingChart(history, lanEvents) {
             responsive: true,
             maintainAspectRatio: false,
             interaction: { mode: 'nearest', intersect: false },
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    const el = elements[0];
+                    const sha = ratingChart.data.datasets[el.datasetIndex].data[el.index].sha256;
+                    if (sha) navigateTo('history/' + sha);
+                }
+            },
             plugins: {
                 legend: { display: false },
                 lanAnnotations: { events: lanEvents || [] },
@@ -94,9 +110,19 @@ function renderRatingChart(history, lanEvents) {
                     bodyFont: { family: "'Cormorant Garamond', serif", size: 14 },
                     titleColor: '#c9a84c',
                     bodyColor: '#e0d4bc',
+                    footerColor: '#7a6f60',
+                    footerFont: { family: "'Cormorant Garamond', serif", size: 11, style: 'italic' },
                     callbacks: {
                         title: (items) => `Game #${items[0].parsed.x}`,
-                        label: (item) => `${item.dataset.label}: ${item.parsed.y}`,
+                        label: (item) => {
+                            const raw = item.raw;
+                            const deltaStr = raw.delta != null ? ` (${raw.delta >= 0 ? '+' : ''}${raw.delta})` : '';
+                            return `${item.dataset.label}: ${item.parsed.y}${deltaStr}`;
+                        },
+                        footer: (items) => {
+                            const sha = items[0]?.raw?.sha256;
+                            return sha ? 'Click to view game' : '';
+                        },
                     }
                 },
                 zoom: {
@@ -148,6 +174,27 @@ function toggleChartPlayer(index, btn) {
     const meta = ratingChart.getDatasetMeta(index);
     meta.hidden = !meta.hidden;
     btn.classList.toggle('active');
+    ratingChart.update();
+}
+
+function showPlayerOnChart(name) {
+    if (!ratingChart) return;
+    // Scroll to chart section
+    const chartSection = document.getElementById('rating-chart');
+    if (chartSection) chartSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // Hide all datasets except the target player
+    ratingChart.data.datasets.forEach((ds, i) => {
+        const meta = ratingChart.getDatasetMeta(i);
+        const btn = document.querySelector(`.chart-toggle[data-index="${i}"]`);
+        if (ds.label === name) {
+            meta.hidden = false;
+            if (btn) btn.classList.add('active');
+        } else {
+            meta.hidden = true;
+            if (btn) btn.classList.remove('active');
+        }
+    });
     ratingChart.update();
 }
 

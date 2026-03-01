@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS rating_history (
     game_index      INTEGER NOT NULL,
     player_name     TEXT NOT NULL,
     mu              REAL NOT NULL,
-    sigma           REAL NOT NULL
+    sigma           REAL NOT NULL,
+    sha256          TEXT
 );
 
 CREATE TABLE IF NOT EXISTS lan_events (
@@ -107,6 +108,13 @@ def get_connection(db_path):
 def init_schema(conn):
     """Create all tables and indexes if they don't exist."""
     conn.executescript(_SCHEMA_SQL)
+    # Migration: add sha256 column to rating_history if missing
+    try:
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(rating_history)").fetchall()]
+        if "sha256" not in cols:
+            conn.execute("ALTER TABLE rating_history ADD COLUMN sha256 TEXT")
+    except Exception:
+        pass
 
 
 # --- Player Ratings ---
@@ -167,10 +175,10 @@ def save_rating_history(db_path, history, lan_events):
             conn.execute("DELETE FROM lan_events")
 
             conn.executemany(
-                """INSERT INTO rating_history (game_index, player_name, mu, sigma)
-                   VALUES (?, ?, ?, ?)""",
+                """INSERT INTO rating_history (game_index, player_name, mu, sigma, sha256)
+                   VALUES (?, ?, ?, ?, ?)""",
                 [
-                    (h["game_index"], h["player_name"], h["mu"], h["sigma"])
+                    (h["game_index"], h["player_name"], h["mu"], h["sigma"], h.get("sha256"))
                     for h in history
                 ],
             )
@@ -204,7 +212,7 @@ def load_rating_history(db_path):
     conn = get_connection(db_path)
     try:
         history_rows = conn.execute(
-            "SELECT game_index, player_name, mu, sigma FROM rating_history ORDER BY id"
+            "SELECT game_index, player_name, mu, sigma, sha256 FROM rating_history ORDER BY id"
         ).fetchall()
         event_rows = conn.execute(
             "SELECT * FROM lan_events ORDER BY start_date"

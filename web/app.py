@@ -128,16 +128,17 @@ def api_games():
         limit = request.args.get("limit", type=int)
         search = request.args.get("search", "", type=str).strip()
         sort = request.args.get("sort", "desc", type=str)
+        sha256 = request.args.get("sha256", "", type=str).strip()
 
         # If pagination params present, use paginated endpoint
-        if offset is not None or limit is not None or search:
+        if offset is not None or limit is not None or search or sha256:
             offset = max(0, offset or 0)
             limit = max(1, min(limit or 30, 100))
             if sort not in ("asc", "desc"):
                 sort = "desc"
             return jsonify(
                 services.get_games_paginated(
-                    offset=offset, limit=limit, search=search, sort=sort
+                    offset=offset, limit=limit, search=search, sort=sort, sha256=sha256
                 )
             )
 

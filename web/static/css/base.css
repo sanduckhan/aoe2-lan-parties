@@ -418,6 +418,16 @@ td.col-rating {
     color: var(--text-bright);
 }
 
+td.col-rating-link {
+    cursor: pointer;
+    border-bottom: 1px dashed var(--gold-dim);
+    transition: color 0.15s;
+}
+
+td.col-rating-link:hover {
+    color: var(--gold-bright);
+}
+
 td.col-conf,
 td.col-hc,
 td.col-games {

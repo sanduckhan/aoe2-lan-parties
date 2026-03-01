@@ -211,6 +211,68 @@ body.modal-open {
     padding: 0.3rem 0.5rem;
 }
 
+.recent-games-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.recent-game-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.45rem 0.6rem;
+    cursor: pointer;
+    text-decoration: none;
+    border-left: 3px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.recent-game-row:hover {
+    background: var(--bg-card-hover);
+}
+
+.recent-game-win {
+    border-left-color: var(--green);
+}
+
+.recent-game-loss {
+    border-left-color: var(--red);
+}
+
+.recent-game-date {
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    min-width: 3.5rem;
+}
+
+.recent-game-teams {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recent-game-result {
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.recent-game-win .recent-game-result {
+    color: var(--green-bright);
+}
+
+.recent-game-loss .recent-game-result {
+    color: var(--red-bright);
+}
+
 /* =====================
    UPLOADER / DOWNLOAD PAGE
    ===================== */

@@ -358,6 +358,27 @@
     color: var(--text-muted);
 }
 
+.admin-sha-link {
+    cursor: pointer;
+    border-bottom: 1px dashed var(--gold-dim);
+    transition: color 0.15s ease;
+}
+
+.admin-sha-link:hover {
+    color: var(--gold-bright);
+}
+
+.btn-view-chronicle {
+    background: rgba(91, 155, 213, 0.15);
+    color: #5b9bd5;
+    border-color: rgba(91, 155, 213, 0.4);
+}
+
+.btn-view-chronicle:hover:not(:disabled) {
+    background: rgba(91, 155, 213, 0.3);
+    border-color: #5b9bd5;
+}
+
 @media (max-width: 600px) {
     .admin-cards {
         grid-template-columns: repeat(2, 1fr);

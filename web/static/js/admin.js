@@ -257,13 +257,16 @@ async function adminFetchGames() {
             const teams = g.teams || {};
             const teamEntries = Object.entries(teams);
             const players = teamEntries.length > 0
-                ? teamEntries.map(([tid, names]) => `<span class="admin-team-group"><span class="admin-team-label">T${tid}</span>${names.join(', ')}</span>`).join(' <span class="admin-team-vs">vs</span> ')
+                ? teamEntries.map(([tid, names]) => `<span class="admin-team-group"><span class="admin-team-label">T${tid}</span>${names.map(n => `<a class="player-link" onclick="openPlayerProfile('${n}')">${n}</a>`).join(', ')}</span>`).join(' <span class="admin-team-vs">vs</span> ')
                 : 'N/A';
             const dur = g.duration_seconds ? `${Math.round(g.duration_seconds / 60)}m` : '-';
             const date = g.datetime ? g.datetime.slice(0, 16).replace('T', ' ') : 'N/A';
 
             // Build actions cell
             let actions = '';
+            if (g.status === 'processed') {
+                actions += `<button class="btn-admin btn-admin-sm btn-view-chronicle" onclick="navigateTo('history/${g.sha256}')">View</button> `;
+            }
             if (g.status === 'no_winner' && Object.keys(teams).length > 0) {
                 const teamEntries = Object.entries(teams);
                 for (const [tid, names] of teamEntries) {
@@ -276,8 +279,11 @@ async function adminFetchGames() {
             }
             actions += `<button class="btn-admin btn-admin-sm btn-danger" onclick="adminDeleteGame('${g.sha256}')">Delete</button>`;
 
+            const shaCell = g.status === 'processed'
+                ? `<td class="admin-sha admin-sha-link" title="${g.sha256}" onclick="navigateTo('history/${g.sha256}')">${g.sha256.slice(0, 12)}...</td>`
+                : `<td class="admin-sha" title="${g.sha256}">${g.sha256.slice(0, 12)}...</td>`;
             html += `<tr>
-                <td class="admin-sha" title="${g.sha256}">${g.sha256.slice(0, 12)}...</td>
+                ${shaCell}
                 <td>${g.filename || 'N/A'}</td>
                 <td>${date}</td>`;
             if (showStatus) html += `<td><span class="admin-status-tag admin-status-${g.status}">${g.status}</span></td>`;

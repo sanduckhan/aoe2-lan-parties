@@ -157,6 +157,16 @@ function handleRoute() {
         }
     }
 
+    // Game deep-link route: #history/<sha256>
+    if (hash.startsWith('history/')) {
+        const sha = hash.slice('history/'.length);
+        if (sha) {
+            switchTab('history');
+            scrollToGame(sha);
+            return;
+        }
+    }
+
     // Tab route
     if (VALID_TABS.includes(hash)) {
         switchTab(hash);
@@ -213,7 +223,7 @@ function renderRatingsTable(players, tableId) {
         <tr class="${rankClass}">
             <td class="col-rank">${medal}</td>
             <td class="col-name"><a class="player-link" onclick="openPlayerProfile('${p.name}')">${p.name}</a></td>
-            <td class="col-rating">${p.mu_scaled.toFixed(0)}</td>
+            <td class="col-rating col-rating-link" onclick="showPlayerOnChart('${p.name}')">${p.mu_scaled.toFixed(0)}</td>
             <td class="col-hc">${p.avg_handicap_last_30 > 100 ? p.avg_handicap_last_30.toFixed(0) + '%' : '100%'}</td>
             <td class="col-hc">${p.recommended_hc}%</td>
             <td class="col-games">${p.games_played}</td>

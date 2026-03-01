@@ -127,7 +127,7 @@ function renderSuggestions(data) {
             ${s.benched && s.benched.length > 0 ? `
             <div class="bp-bench">
                 <span class="bp-bench-label">Resting</span>
-                <span class="bp-bench-names">${s.benched.map(p => p.name).join(', ')}</span>
+                <span class="bp-bench-names">${s.benched.map(p => `<a class="player-link" onclick="openPlayerProfile('${p.name}')">${p.name}</a>`).join(', ')}</span>
             </div>` : ''}
 
             ${changesHtml}
@@ -220,6 +220,31 @@ function renderGameView() {
         document.getElementById('t2-changes').innerHTML =
             state.currentTeam2.map(p => ratingChangeRow(p.name)).join('');
     }
+
+    // "Find in Chronicles" button
+    let findBtn = document.getElementById('find-in-chronicles-btn');
+    if (!findBtn) {
+        findBtn = document.createElement('div');
+        findBtn.id = 'find-in-chronicles-btn';
+        findBtn.className = 'find-chronicles-wrap';
+        const gameContent = document.getElementById('game-content');
+        gameContent.appendChild(findBtn);
+    }
+    findBtn.innerHTML = `<button class="btn-secondary btn-find-chronicles" onclick="findTeamGamesInChronicles()">Find in Chronicles</button>`;
+}
+
+function findTeamGamesInChronicles() {
+    const allNames = [
+        ...state.currentTeam1.map(p => p.name),
+        ...state.currentTeam2.map(p => p.name),
+    ];
+    const search = allNames.join(' ');
+    // Set the search filter and navigate to history
+    historySearch = search;
+    historyFetched = false;
+    const filterInput = document.getElementById('history-filter');
+    if (filterInput) filterInput.value = search;
+    navigateTo('history');
 }
 
 function playerCard(p) {
@@ -272,6 +297,7 @@ function renderManualSetup() {
         const rating = player ? player.mu_scaled.toFixed(0) : '?';
         const html = `<div class="manual-player" onclick="cycleAssignment('${name}')">
             <span class="mp-name">${name}</span>
+            <span class="mp-profile-icon" onclick="event.stopPropagation(); openPlayerProfile('${name}')" title="View profile">&#9881;</span>
             <span class="mp-rating">${rating}</span>
         </div>`;
         if (assignment === 'team1') team1.push(html);
@@ -384,12 +410,12 @@ function renderRebalanceResults(data) {
             <div class="rebalance-teams">
                 <div>
                     <strong>Team I</strong><br>
-                    ${s.team1.map(p => `${p.name} (${p.recommended_hc}%)`).join('<br>')}
+                    ${s.team1.map(p => `<a class="player-link" onclick="openPlayerProfile('${p.name}')">${p.name}</a> (${p.recommended_hc}%)`).join('<br>')}
                 </div>
                 <div class="rebalance-vs">VS</div>
                 <div>
                     <strong>Team II</strong><br>
-                    ${s.team2.map(p => `${p.name} (${p.recommended_hc}%)`).join('<br>')}
+                    ${s.team2.map(p => `<a class="player-link" onclick="openPlayerProfile('${p.name}')">${p.name}</a> (${p.recommended_hc}%)`).join('<br>')}
                 </div>
             </div>
             <div class="rebalance-footer">

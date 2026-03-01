@@ -11,6 +11,7 @@ let historyAbortController = null;
 let searchDebounceTimer = null;
 let expandedGameSha = null;
 const gameDetailCache = {};
+var pendingScrollSha = null;
 
 async function fetchGameHistory(append = false) {
     // Cancel any in-flight request
@@ -55,6 +56,7 @@ async function fetchGameHistory(append = false) {
             renderGameHistory(data.games);
             document.getElementById('history-loading').style.display = 'none';
             document.getElementById('history-content').style.display = '';
+            _tryScrollToPending();
         }
 
         updateHistoryStatus();
@@ -378,6 +380,56 @@ function redeployFromChronicle(sha256Key) {
         match_quality: null,
         expected_winner: null,
     });
+}
+
+async function scrollToGame(sha256) {
+    const container = document.getElementById('history-list');
+
+    // If history not loaded yet, store pending and trigger fetch
+    if (!historyFetched) {
+        pendingScrollSha = sha256;
+        historyFetched = true;
+        await fetchGameHistory(false);
+        // After fetch, pendingScrollSha is handled in _tryScrollToGame
+        return;
+    }
+
+    // Check if game card already in DOM
+    const existing = container.querySelector(`.gc-entry[data-sha="${sha256}"]`);
+    if (existing) {
+        _highlightAndExpandGame(existing, sha256);
+        return;
+    }
+
+    // Not in DOM — fetch directly by sha256 and prepend
+    try {
+        const res = await fetch(`/api/games?sha256=${sha256}`);
+        const data = await res.json();
+        if (data.games && data.games.length > 0) {
+            window._chronicleGames = window._chronicleGames || {};
+            const html = data.games.map(g => buildGameCardHTML(g)).join('');
+            container.insertAdjacentHTML('afterbegin', html);
+            const card = container.querySelector(`.gc-entry[data-sha="${sha256}"]`);
+            if (card) _highlightAndExpandGame(card, sha256);
+        }
+    } catch (err) {
+        console.error('Failed to fetch game for deep-link:', err);
+    }
+}
+
+function _highlightAndExpandGame(cardEl, sha256) {
+    cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    cardEl.classList.add('gc-entry-highlight');
+    setTimeout(() => cardEl.classList.remove('gc-entry-highlight'), 2500);
+    // Expand the game detail
+    toggleGameDetail(sha256);
+}
+
+function _tryScrollToPending() {
+    if (!pendingScrollSha) return;
+    const sha = pendingScrollSha;
+    pendingScrollSha = null;
+    scrollToGame(sha);
 }
 
 // History filter (debounced server-side search) + infinite scroll

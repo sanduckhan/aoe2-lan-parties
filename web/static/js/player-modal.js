@@ -106,6 +106,24 @@ function renderPlayerProfile(p) {
         </div>` : ''}
 
         ${p.avg_eapm ? `<div class="profile-section"><h3>Average eAPM</h3><p class="profile-eapm">${p.avg_eapm}</p></div>` : ''}
+
+        ${p.recent_games && p.recent_games.length > 0 ? `
+        <div class="profile-section">
+            <h3>Recent Battles</h3>
+            <div class="recent-games-list">
+                ${p.recent_games.map(g => {
+                    const dateObj = g.datetime && g.datetime !== '0001-01-01T00:00:00' ? new Date(g.datetime) : null;
+                    const dateStr = dateObj ? dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '?';
+                    const resultClass = g.won ? 'recent-game-win' : 'recent-game-loss';
+                    const resultText = g.won ? 'Victory' : 'Defeat';
+                    return `<a class="recent-game-row ${resultClass}" onclick="closePlayerModal(); navigateTo('history/${g.sha256}')">
+                        <span class="recent-game-date">${dateStr}</span>
+                        <span class="recent-game-teams">${g.teams_summary}</span>
+                        <span class="recent-game-result">${resultText}</span>
+                    </a>`;
+                }).join('')}
+            </div>
+        </div>` : ''}
     `;
 }
 
