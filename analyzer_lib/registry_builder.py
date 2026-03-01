@@ -29,27 +29,40 @@ def compute_game_fingerprint(
 
     Two replay files of the same game (recorded by different players) will have
     different SHA256s but the same fingerprint, because the player names, civs,
-    team assignments, and game duration are identical.
+    team assignments, and game start time are identical.
 
-    Note: datetime is NOT used because different recorders produce slightly
-    different timestamps (up to ~60s apart). Duration (rounded to nearest
-    minute) is used instead — it's game time, identical across recorders.
+    Uses game_datetime (rounded to nearest 5 minutes) instead of duration to
+    handle partial recordings: a player who disconnects early produces a shorter
+    replay with a different duration, but the same start time. Rounding to 5
+    minutes absorbs the ~60s jitter between different recorders' timestamps.
 
     Args:
         teams: Teams dict as stored in registry, e.g.
             {"1": [{"name": "Alice", "civ": "Britons", ...}, ...], "2": [...]}
-        duration_seconds: Game duration in seconds (rounded to nearest minute).
-        game_datetime: Unused, kept for backward compatibility.
+        duration_seconds: Unused, kept for backward compatibility.
+        game_datetime: ISO datetime string from the replay filename.
 
     Returns:
         Hex SHA256 of the canonical representation.
     """
-    duration_minutes = round(duration_seconds / 60)
+    # Round datetime to nearest 5-minute window to absorb recorder jitter
+    dt_bucket = ""
+    if game_datetime:
+        try:
+            dt_str = game_datetime.replace("T", " ")
+            dt = datetime.fromisoformat(dt_str)
+            # Round to nearest 5 minutes
+            minutes = (dt.minute // 5) * 5
+            dt_rounded = dt.replace(minute=minutes, second=0, microsecond=0)
+            dt_bucket = dt_rounded.strftime("%Y-%m-%d %H:%M")
+        except (ValueError, AttributeError):
+            pass
+
     players_canonical = []
     for tid in sorted(teams.keys()):
         for p in sorted(teams[tid], key=lambda x: x["name"]):
             players_canonical.append(f"{tid}:{p['name']}:{p.get('civ', '')}")
-    raw = f"{duration_minutes}|{'|'.join(players_canonical)}"
+    raw = f"{dt_bucket}|{'|'.join(players_canonical)}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
@@ -180,7 +193,7 @@ def replay_to_registry_entry(file_bytes, sha256, filename_hint="", source_path=N
     # --- Fingerprint ---
     if teams_dict:
         entry["fingerprint"] = compute_game_fingerprint(
-            teams_dict, duration_seconds=duration_seconds
+            teams_dict, game_datetime=entry.get("datetime", "")
         )
 
     # --- Extract action-based deltas ---
