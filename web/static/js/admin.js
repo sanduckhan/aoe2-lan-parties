@@ -218,48 +218,6 @@ function adminPollRebuild() {
     }, 2000);
 }
 
-// --- Sync from Disk ---
-
-async function adminSyncFromDisk() {
-    const btn = document.getElementById('admin-sync-btn');
-    const resultEl = document.getElementById('admin-sync-result');
-    btn.disabled = true;
-    btn.textContent = 'Syncing...';
-    resultEl.style.display = '';
-    resultEl.innerHTML = '<div class="loading-text">Scanning replay directory...</div>';
-
-    try {
-        const res = await fetch('/api/admin/sync-from-disk', {
-            method: 'POST',
-            headers: adminHeaders(),
-        });
-        if (res.status === 401) { adminLogout(); return; }
-        const data = await res.json();
-
-        if (data.error) {
-            resultEl.innerHTML = `<div class="admin-error">${data.error}</div>`;
-        } else {
-            const bd = data.status_breakdown || {};
-            let bdHtml = Object.entries(bd).map(([k, v]) => `${k}: ${v}`).join(', ');
-            resultEl.innerHTML = `
-                <div class="admin-sync-summary">
-                    <p><strong>${data.new || 0}</strong> new games added</p>
-                    <p>${data.skipped_existing || 0} already in registry, ${data.skipped_duplicate || 0} fingerprint duplicates</p>
-                    <p>Total files scanned: ${data.total_files || 0}</p>
-                    ${bdHtml ? `<p>Breakdown: ${bdHtml}</p>` : ''}
-                </div>
-            `;
-            adminFetchHealth();
-        }
-    } catch (err) {
-        resultEl.innerHTML = '<div class="admin-error">Sync request failed.</div>';
-        console.error(err);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Sync Now';
-    }
-}
-
 // --- Game Management ---
 
 async function adminFetchGames() {

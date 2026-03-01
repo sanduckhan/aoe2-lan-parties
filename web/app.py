@@ -281,10 +281,3 @@ def api_admin_set_winner(sha256):
     return jsonify(result), 200
 
 
-@app.route("/api/admin/sync-from-disk", methods=["POST"])
-@require_api_key
-def api_admin_sync_from_disk():
-    result = services.admin_sync_from_disk()
-    if "error" in result:
-        return jsonify(result), 500
-    return jsonify(result), 200

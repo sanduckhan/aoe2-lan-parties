@@ -774,9 +774,3 @@ def set_admin_game_winner(sha256: str, winning_team_id: str) -> Dict[str, Any]:
     return {"status": "updated", "sha256": sha256, "winning_team_id": str(winning_team_id)}
 
 
-def admin_sync_from_disk() -> Dict[str, Any]:
-    """Scan local replay directory for new files and add to registry."""
-    from analyzer_lib.registry_builder import sync_registry_from_disk
-
-    registry = _get_registry()
-    return sync_registry_from_disk(registry)
