@@ -1,0 +1,379 @@
+/* ==========================================================================
+   ADMIN PAGE
+   ========================================================================== */
+
+.admin-auth {
+    max-width: 420px;
+    margin: 2rem auto;
+    text-align: center;
+}
+
+.admin-auth-form {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    justify-content: center;
+}
+
+.admin-input {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 0.6rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    width: 220px;
+}
+
+.admin-input:focus {
+    outline: none;
+    border-color: var(--gold-dim);
+}
+
+.btn-admin {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.55rem 1.2rem;
+    background: var(--gold-dark);
+    color: var(--gold-bright);
+    border: 1px solid var(--gold-dim);
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-admin:hover:not(:disabled) {
+    background: var(--gold-dim);
+    border-color: var(--gold);
+}
+
+.btn-admin:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-admin-sm {
+    font-size: 0.65rem;
+    padding: 0.35rem 0.7rem;
+}
+
+.btn-danger {
+    background: rgba(184, 58, 42, 0.2);
+    color: var(--red-bright);
+    border-color: var(--red);
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: rgba(184, 58, 42, 0.35);
+    border-color: var(--red-bright);
+}
+
+.btn-set-winner {
+    background: rgba(106, 158, 85, 0.15);
+    color: var(--green-bright);
+    border-color: var(--green);
+}
+
+.btn-set-winner:hover:not(:disabled) {
+    background: rgba(106, 158, 85, 0.3);
+    border-color: var(--green-bright);
+}
+
+.admin-team-group {
+    white-space: nowrap;
+}
+
+.admin-team-label {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--gold);
+    background: var(--bg-elevated);
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    margin-right: 0.3rem;
+    vertical-align: baseline;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.admin-team-vs {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin: 0 0.15rem;
+}
+
+.admin-actions-cell {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    align-items: center;
+}
+
+.admin-error {
+    color: var(--red-bright);
+    margin-top: 0.75rem;
+    font-size: 0.95rem;
+}
+
+.admin-info {
+    color: var(--green-bright);
+    font-size: 0.9rem;
+}
+
+/* Health Cards */
+.admin-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.admin-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    text-align: center;
+}
+
+.admin-card-wide {
+    grid-column: span 2;
+}
+
+.admin-card-value {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--gold-bright);
+    margin-bottom: 0.25rem;
+}
+
+.admin-card-label {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.admin-badge {
+    display: inline-block;
+    background: rgba(201, 168, 76, 0.2);
+    color: var(--gold-bright);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.65rem;
+    vertical-align: middle;
+    text-transform: uppercase;
+}
+
+.admin-status-breakdown {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding-top: 0.25rem;
+}
+
+.admin-status-tag {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 3px;
+    background: var(--bg-elevated);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.admin-status-processed { color: var(--green-bright); border-color: var(--green); }
+.admin-status-no_winner { color: var(--gold-bright); border-color: var(--gold-dim); }
+.admin-status-parse_error { color: var(--red-bright); border-color: var(--red); }
+.admin-status-too_short { color: var(--text-muted); }
+.admin-status-unknown_player { color: #c49ed8; border-color: #7a5a8a; }
+.admin-status-duplicate { color: var(--text-muted); }
+
+/* Sections & Actions */
+.admin-section {
+    margin-bottom: 2rem;
+}
+
+.admin-section h3 {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    color: var(--gold);
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.admin-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.admin-action-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.25rem;
+}
+
+.admin-action-card h4 {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    color: var(--gold-bright);
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.03em;
+}
+
+.admin-action-card p {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    margin-bottom: 1rem;
+    line-height: 1.4;
+}
+
+/* Rebuild Progress */
+.admin-rebuild-progress {
+    margin-top: 0.75rem;
+}
+
+.admin-progress-phase {
+    font-size: 0.85rem;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+}
+
+.admin-progress-bar-bg {
+    height: 8px;
+    background: var(--bg-elevated);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.35rem;
+}
+
+.admin-progress-bar-fill {
+    height: 100%;
+    background: var(--gold);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.admin-progress-text {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 0.35rem;
+}
+
+.admin-progress-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+}
+
+/* Sync Result */
+.admin-sync-summary {
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+    color: var(--text);
+    line-height: 1.6;
+}
+
+.admin-sync-summary strong {
+    color: var(--gold-bright);
+}
+
+/* Filter Row */
+.admin-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.admin-filter-row label {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+}
+
+.admin-select {
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 0.4rem 0.75rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.admin-select:focus {
+    outline: none;
+    border-color: var(--gold-dim);
+}
+
+/* Games Table */
+.admin-games-count {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 0.5rem;
+}
+
+.admin-games-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.admin-games-table th,
+.admin-games-table td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+}
+
+.admin-games-table th {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    color: var(--gold-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.admin-sha {
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+@media (max-width: 600px) {
+    .admin-cards {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .admin-card-wide {
+        grid-column: span 2;
+    }
+    .admin-actions {
+        grid-template-columns: 1fr;
+    }
+    .admin-auth-form {
+        flex-direction: column;
+        align-items: center;
+    }
+    .admin-input {
+        width: 100%;
+        max-width: 280px;
+    }
+}

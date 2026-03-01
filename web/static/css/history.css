@@ -1,0 +1,592 @@
+/* =====================
+   GAME HISTORY TAB
+   ===================== */
+.history-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.history-search {
+    flex: 1;
+    max-width: 360px;
+    padding: 0.7rem 1.1rem;
+    font-family: var(--font-body);
+    font-size: 1.05rem;
+    font-weight: 600;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    transition: border-color 0.2s ease;
+}
+
+.history-search:focus {
+    outline: none;
+    border-color: var(--gold-dim);
+}
+
+.history-search::placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.history-list {
+    max-height: calc(100vh - 340px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--gold-dark) transparent;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.scroll-loader {
+    padding: 1.5rem;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.scroll-loader .loading-text {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+/* ======================
+   GAME CHRONICLE — CARD
+   ====================== */
+.gc-entry {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.gc-entry:hover {
+    border-color: var(--border-gold);
+}
+
+.gc-entry.gc-expanded {
+    border-color: var(--border-gold-bright);
+    box-shadow: var(--shadow-md), var(--shadow-gold);
+}
+
+/* --- Top bar: number, date, duration --- */
+.gc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 1.25rem;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(48, 42, 34, 0.5);
+    transition: background 0.15s ease;
+}
+
+.gc-header:hover {
+    background: var(--bg-card-hover);
+}
+
+.gc-left {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+}
+
+.gc-number {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--gold);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+.gc-date {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-dim);
+    letter-spacing: 0.03em;
+}
+
+.gc-duration {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.gc-expand-icon {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    transition: transform 0.3s ease;
+}
+
+.gc-expanded .gc-expand-icon {
+    transform: rotate(180deg);
+}
+
+/* --- Matchup: two sides --- */
+.gc-matchup {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0;
+    align-items: stretch;
+    cursor: pointer;
+    min-height: 3.5rem;
+}
+
+.gc-side {
+    padding: 0.85rem 1.25rem;
+}
+
+.gc-side-label {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 0.45rem;
+    display: block;
+}
+
+.gc-victory-label { color: var(--green-bright); }
+.gc-defeat-label { color: var(--red-bright); }
+
+.gc-loser-side {
+    text-align: right;
+}
+
+.gc-loser-side .gc-players {
+    justify-content: flex-end;
+}
+
+.gc-loser-side .gc-player-chip {
+    text-align: right;
+}
+
+.gc-players {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+}
+
+.gc-player-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3rem;
+}
+
+.gc-player-chip .player-link {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.gc-winner-side .gc-player-chip .player-link {
+    color: var(--text-bright);
+}
+
+.gc-loser-side .gc-player-chip .player-link {
+    color: var(--text);
+}
+
+.gc-civ {
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    font-style: italic;
+    font-weight: 600;
+}
+
+.gc-vs-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.25rem;
+    position: relative;
+}
+
+.gc-vs-divider::before {
+    content: '';
+    position: absolute;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    left: 50%;
+    width: 1px;
+    background: var(--border);
+}
+
+.gc-vs-divider span {
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    color: var(--gold);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--bg-card);
+    padding: 0.3rem 0.15rem;
+    position: relative;
+    z-index: 1;
+}
+
+/* --- Actions bar --- */
+.gc-actions-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.45rem 1.25rem;
+    border-top: 1px solid rgba(48, 42, 34, 0.5);
+}
+
+.gc-action-btn {
+    font-family: var(--font-display);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    line-height: 1;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    text-decoration: none;
+    padding: 0.45rem 0.95rem;
+}
+
+.gc-action-redeploy {
+    background: linear-gradient(180deg, var(--gold) 0%, #a8893e 100%);
+    color: #1a1714;
+    border: 1px solid var(--gold-bright);
+    box-shadow: 0 2px 8px rgba(201, 168, 76, 0.15);
+}
+
+.gc-action-redeploy:hover {
+    background: linear-gradient(180deg, var(--gold-bright) 0%, var(--gold) 100%);
+    box-shadow: 0 3px 14px rgba(201, 168, 76, 0.25);
+    transform: translateY(-1px);
+}
+
+.gc-action-download {
+    color: var(--text);
+    border: 1px solid var(--border);
+    background: transparent;
+    display: inline-block;
+}
+
+.gc-action-download:hover {
+    border-color: var(--gold);
+    color: var(--gold-bright);
+}
+
+/* --- Streak & rating badges --- */
+.streak-badge {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.12rem 0.4rem;
+    margin-left: 0.3rem;
+    vertical-align: middle;
+}
+
+.streak-badge.win-streak {
+    color: var(--green-bright);
+    border: 1px solid var(--green);
+    background: rgba(106, 158, 85, 0.1);
+}
+
+.streak-badge.loss-streak {
+    color: var(--red-bright);
+    border: 1px solid var(--red);
+    background: rgba(184, 58, 42, 0.1);
+}
+
+.rating-delta {
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-left: 0.3rem;
+    vertical-align: baseline;
+}
+
+.rating-delta.rating-up { color: var(--green-bright); }
+.rating-delta.rating-down { color: var(--red-bright); }
+
+.gc-hc {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-left: 0.3rem;
+    color: var(--gold);
+}
+
+/* =========================
+   GAME DETAIL — EXPANDED
+   ========================= */
+.gc-detail {
+    border-top: 1px solid var(--border);
+    background: var(--bg-deep);
+}
+
+.gc-detail-loading,
+.gc-detail-error {
+    padding: 2.5rem;
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    color: var(--text-dim);
+}
+
+.gc-detail-error { color: var(--red-bright); }
+
+.gd-panel {
+    padding: 1.75rem;
+}
+
+/* --- Battle grid: two columns --- */
+.gd-battle-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+}
+
+.gd-side-header {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.gd-side-victory { color: var(--green-bright); }
+.gd-side-defeat { color: var(--red-bright); }
+
+/* --- Player card --- */
+.gd-player-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 0.75rem;
+    border-left: 3px solid transparent;
+}
+
+.gd-card-winner {
+    border-left-color: var(--green);
+}
+
+.gd-card-loser {
+    border-left-color: var(--red);
+}
+
+.gd-card-top {
+    margin-bottom: 0.85rem;
+}
+
+.gd-card-identity {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.gd-card-name {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-bright);
+}
+
+.gd-card-name .player-link {
+    color: inherit;
+}
+
+.gd-rating {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-left: 0.5rem;
+}
+
+.gd-rating.rating-up { color: var(--green-bright); }
+.gd-rating.rating-down { color: var(--red-bright); }
+
+.gd-card-civ {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    font-style: italic;
+}
+
+/* --- Stats row --- */
+.gd-card-stats {
+    display: flex;
+    gap: 0.1rem;
+    margin-bottom: 1rem;
+}
+
+.gd-card-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    padding: 0.5rem 0.25rem;
+    background: var(--bg-elevated);
+    border: 1px solid rgba(48, 42, 34, 0.6);
+}
+
+.gd-card-stat-val {
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-bright);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.gd-card-stat-key {
+    font-family: var(--font-display);
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    line-height: 1;
+}
+
+/* --- Sections (army, techs) --- */
+.gd-card-section {
+    margin-bottom: 0.85rem;
+}
+
+.gd-card-section:last-child {
+    margin-bottom: 0;
+}
+
+.gd-card-section-title {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 0.5rem;
+}
+
+/* Army composition list */
+.gd-army-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.gd-army-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.3rem 0.6rem;
+    background: rgba(42, 36, 28, 0.4);
+    border-left: 2px solid var(--border);
+}
+
+.gd-army-name {
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-bright);
+}
+
+.gd-army-count {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--gold);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Tech tags */
+.gd-tech-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.gd-tech-tag {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    background: rgba(201, 168, 76, 0.06);
+    border: 1px solid var(--border);
+    color: var(--text);
+}
+
+/* --- Footer --- */
+.gd-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.gd-footer-stats {
+    display: flex;
+    gap: 2rem;
+    font-family: var(--font-body);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.gd-footer-stats b {
+    color: var(--text-bright);
+    font-weight: 700;
+}
+
+.gd-footer-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* --- Responsive --- */
+@media (max-width: 900px) {
+    .gc-matchup {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+
+    .gc-vs-divider {
+        padding: 0.3rem 0;
+    }
+
+    .gc-vs-divider::before {
+        display: none;
+    }
+
+    .gc-loser-side {
+        text-align: left;
+    }
+
+    .gc-loser-side .gc-players {
+        justify-content: flex-start;
+    }
+
+    .gd-battle-grid {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .gc-left { gap: 0.75rem; }
+    .gc-side { padding: 0.65rem 1rem; }
+    .gd-panel { padding: 1.25rem; }
+    .gd-card-stats { flex-wrap: wrap; }
+    .gd-card-stat { min-width: 30%; }
+    .gd-footer { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+}
+

@@ -1,0 +1,215 @@
+/* =====================
+   RATING CHART
+   ===================== */
+.chart-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    padding: 1rem;
+    height: 400px;
+    box-shadow: var(--shadow-md);
+    margin-bottom: 1.5rem;
+}
+
+.chart-controls {
+    margin-bottom: 0.75rem;
+}
+
+.chart-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.chart-toggle {
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 0.3rem 0.65rem;
+    background: transparent;
+    border: 1px solid;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.2s ease;
+}
+
+.chart-toggle.active {
+    opacity: 1;
+    background: rgba(201, 168, 76, 0.06);
+}
+
+/* =====================
+   AWARDS TAB
+   ===================== */
+.event-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    font-family: 'Cormorant Garamond', serif;
+}
+
+.event-selector label {
+    font-family: 'Cinzel', serif;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gold-dim);
+}
+
+.event-selector select {
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid var(--gold-dark);
+    border-radius: 4px;
+    padding: 0.4rem 0.75rem;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 0.95rem;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.event-selector select:hover,
+.event-selector select:focus {
+    border-color: var(--gold);
+}
+
+.event-selector select option {
+    background: var(--bg-card);
+    color: var(--text);
+}
+
+.event-info {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+.awards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.25rem;
+}
+
+.award-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--gold-dim);
+    padding: 1.5rem 1.25rem;
+    text-align: center;
+    box-shadow: var(--shadow-md), var(--shadow-gold);
+    animation: slideUp 0.4s ease-out both;
+    transition: border-top-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.award-card:hover {
+    border-top-color: var(--gold);
+    box-shadow: var(--shadow-lg), 0 0 40px rgba(201, 168, 76, 0.12);
+}
+
+.award-card-wide {
+    grid-column: span 2;
+}
+
+.award-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.6rem;
+    opacity: 0.8;
+}
+
+.award-title {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 1rem;
+}
+
+.award-winner, .award-runner-up {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0;
+    flex-wrap: wrap;
+}
+
+.award-winner .award-name {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--gold-bright);
+}
+
+.award-runner-up .award-name {
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.award-medal {
+    color: #e4c766;
+    font-size: 1.2rem;
+}
+
+.award-medal.silver {
+    color: #b0b0b0;
+    font-size: 1rem;
+}
+
+.award-stat {
+    font-size: 0.88rem;
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+.award-per-player {
+    text-align: left;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.award-entry {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.award-entry:last-child {
+    border-bottom: none;
+}
+
+.award-entry.award-winner {
+    background: rgba(201, 168, 76, 0.06);
+}
+
+.matchup-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    font-size: 0.95rem;
+    color: var(--text-bright);
+    margin: 0.75rem 0 0.4rem;
+    flex-wrap: wrap;
+}
+
+.matchup-vs {
+    color: var(--gold-dim);
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+}
+
+.matchup-score {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-bright);
+}
+

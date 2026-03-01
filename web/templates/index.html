@@ -7,7 +7,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/teams.css">
+    <link rel="stylesheet" href="/static/css/chart-awards.css">
+    <link rel="stylesheet" href="/static/css/history.css">
+    <link rel="stylesheet" href="/static/css/modal-uploader.css">
+    <link rel="stylesheet" href="/static/css/admin.css">
     <script src="/static/chart.min.js"></script>
     <script src="/static/hammer.min.js"></script>
     <script src="/static/chartjs-plugin-zoom.min.js"></script>
@@ -711,6 +716,13 @@
         </div>
     </main>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/js/core.js"></script>
+    <script src="/static/js/chart.js"></script>
+    <script src="/static/js/awards.js"></script>
+    <script src="/static/js/history.js"></script>
+    <script src="/static/js/player-modal.js"></script>
+    <script src="/static/js/teams.js"></script>
+    <script src="/static/js/admin.js"></script>
+    <script>fetchPlayers(); handleRoute();</script>
 </body>
 </html>

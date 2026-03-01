@@ -144,8 +144,21 @@ Standalone utilities that import from `analyzer_lib/`.
 - **app.py** — Flask routes serving the single-page HTML and JSON API endpoints (`/api/players`, `/api/teams/generate`, `/api/teams/rebalance`, `/api/games`, `/api/games/<sha256>/download`, `/api/awards`, `/api/stats`, `/api/player/<name>`, `/api/rating-history`, `/api/lan-events`, `/api/upload`, `/api/rebuild`, `/api/rebuild/status`).
 - **services.py** — Business logic bridge between Flask routes and `analyzer_lib`/scripts. Reads all data from SQLite via `analyzer_lib.db`. Handles player ratings, team generation, rebalance, game history, player profiles, LAN event awards, replay downloads, and upload processing. Applies cosmetic **rating re-centering** (`_compute_rating_offset()`) so the group average is always displayed as 1000 — TrueSkill's non-zero-sum mu drift is corrected at the display layer only. The offset is also passed to `recommended_handicap()` so the 700 floor stays calibrated relative to the group average.
 - **templates/index.html** — Single-page UI with tabs for Ratings, Awards, Battle Chronicles, Team Generator, Game View, and Uploader.
-- **static/app.js** — Client-side JavaScript for tab navigation, API calls, dynamic rendering, rating evolution chart (Chart.js), and sound effects.
-- **static/style.css** — Dark medieval-themed styling for the web interface.
+- **static/js/** — Client-side JavaScript, split by feature. No build system; files are loaded as separate `<script>` tags in order. Cross-file globals use `var` declarations in `core.js`.
+  - `core.js` — State, routing (hash-based), ratings table, player checkboxes, sound effects
+  - `chart.js` — Rating evolution chart (Chart.js) with LAN event annotations and zoom
+  - `awards.js` — Award definitions, fetch, and render (lazy-loaded on tab open)
+  - `history.js` — Game chronicles, infinite scroll, game detail expand, search filter
+  - `player-modal.js` — Player profile modal (opened via hash route `#player/Name`)
+  - `teams.js` — Team generation, battle plan cards, game view, rebalance, manual setup
+  - `admin.js` — Admin dashboard, health cards, rebuild/sync operations, game management
+- **static/css/** — Styling split by feature, loaded as separate `<link>` tags. Dark medieval theme with CSS custom properties in `base.css`.
+  - `base.css` — Variables, reset, typography, header/nav, tables, buttons, responsive breakpoints
+  - `teams.css` — Team generator, suggestion cards, game view, rebalance, manual setup
+  - `chart-awards.css` — Rating chart, chart controls, awards grid, event selector
+  - `history.css` — History controls, game chronicle cards, game detail expanded view
+  - `modal-uploader.css` — Player profile modal, uploader page
+  - `admin.css` — Admin auth, health cards, operations, games table
 
 ### Key Dependencies
 
