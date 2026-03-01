@@ -574,7 +574,7 @@ class IncrementalProcessor:
         })
 
         new_games = []
-        seen_fingerprints = set()
+        seen_fingerprints = {}  # fp -> index in new_games
         counts = defaultdict(int)
 
         for i, replay_info in enumerate(replay_list, 1):
@@ -592,15 +592,25 @@ class IncrementalProcessor:
 
             entry = replay_to_registry_entry(file_bytes, sha)
 
-            # Fingerprint dedup: same game recorded by different players
+            # Fingerprint dedup: same game recorded by different players.
+            # A 'processed' entry always wins over a 'no_winner' entry
+            # (e.g., partial recording from a player who disconnected early).
             fp = entry.get("fingerprint")
             if fp and fp in seen_fingerprints:
-                logger.info(f"Skipping fingerprint duplicate: {sha}")
-                counts["fingerprint_duplicate"] += 1
+                existing_idx = seen_fingerprints[fp]
+                existing_entry = new_games[existing_idx]
+                if entry["status"] == "processed" and existing_entry["status"] == "no_winner":
+                    logger.info(f"Replacing no_winner {existing_entry['sha256'][:12]} with processed {sha[:12]}")
+                    new_games[existing_idx] = entry
+                    seen_fingerprints[fp] = existing_idx
+                    counts["fingerprint_duplicate"] += 1
+                else:
+                    logger.info(f"Skipping fingerprint duplicate: {sha}")
+                    counts["fingerprint_duplicate"] += 1
                 self._full_rebuild_progress["counts"] = dict(counts)
                 continue
             if fp:
-                seen_fingerprints.add(fp)
+                seen_fingerprints[fp] = len(new_games)
 
             new_games.append(entry)
             counts[entry["status"]] += 1
