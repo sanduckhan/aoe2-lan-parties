@@ -376,10 +376,16 @@ class IncrementalProcessor:
 
         # If a processed entry supersedes an existing no_winner, delete the old one
         # so the DB doesn't accumulate duplicate fingerprints.
-        if fingerprint and existing_fp_status == "no_winner" and entry["status"] == "processed":
+        if (
+            fingerprint
+            and existing_fp_status == "no_winner"
+            and entry["status"] == "processed"
+        ):
             old_sha256 = self._registry.get_sha256_by_fingerprint(fingerprint)
             if old_sha256:
-                logger.info(f"Superseding no_winner {old_sha256} with processed {sha256}")
+                logger.info(
+                    f"Superseding no_winner {old_sha256} with processed {sha256}"
+                )
                 self._registry.delete_game(old_sha256)
 
         # --- Store in bucket (non-critical) ---
@@ -568,10 +574,12 @@ class IncrementalProcessor:
         total = len(replay_list)
         logger.info(f"Full rebuild: found {total} replays in bucket")
 
-        self._full_rebuild_progress.update({
-            "phase": "downloading_and_parsing",
-            "total": total,
-        })
+        self._full_rebuild_progress.update(
+            {
+                "phase": "downloading_and_parsing",
+                "total": total,
+            }
+        )
 
         new_games = []
         seen_fingerprints = {}  # fp -> index in new_games
@@ -599,8 +607,13 @@ class IncrementalProcessor:
             if fp and fp in seen_fingerprints:
                 existing_idx = seen_fingerprints[fp]
                 existing_entry = new_games[existing_idx]
-                if entry["status"] == "processed" and existing_entry["status"] == "no_winner":
-                    logger.info(f"Replacing no_winner {existing_entry['sha256'][:12]} with processed {sha[:12]}")
+                if (
+                    entry["status"] == "processed"
+                    and existing_entry["status"] == "no_winner"
+                ):
+                    logger.info(
+                        f"Replacing no_winner {existing_entry['sha256'][:12]} with processed {sha[:12]}"
+                    )
                     new_games[existing_idx] = entry
                     seen_fingerprints[fp] = existing_idx
                     counts["fingerprint_duplicate"] += 1
@@ -626,8 +639,7 @@ class IncrementalProcessor:
         rating_deltas = {}
         try:
             ratable_games = [
-                g for g in new_games
-                if g["status"] in ("processed", "no_winner")
+                g for g in new_games if g["status"] in ("processed", "no_winner")
             ]
             _, _, _, rating_deltas = run_trueskill_from_registry(
                 ratable_games, data_dir=self._data_dir
@@ -647,10 +659,12 @@ class IncrementalProcessor:
             logger.error(f"Analysis rebuild during full rebuild failed: {e}")
 
         duration = time.time() - start_time
-        self._full_rebuild_progress.update({
-            "phase": "done",
-            "duration_seconds": round(duration, 1),
-        })
+        self._full_rebuild_progress.update(
+            {
+                "phase": "done",
+                "duration_seconds": round(duration, 1),
+            }
+        )
         logger.info(f"Full rebuild complete in {duration:.1f}s: {counts}")
 
 
@@ -703,7 +717,9 @@ def rebuild_analysis_from_registry(registry, data_dir=None, rating_deltas=None):
                 gr["rating_changes"] = rating_deltas[sha]
 
     analysis_data = {
-        "awards": compute_all_awards(player_stats, game_stats),
+        "awards": compute_all_awards(
+            player_stats, game_stats, game_results=game_results
+        ),
         "general_stats": compute_general_stats(game_stats),
         "game_results": game_results,
         "player_profiles": compute_player_profiles(player_stats, head_to_head),

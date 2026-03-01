@@ -614,7 +614,21 @@ def compute_event_awards(event_id: str) -> Optional[Dict[str, Any]]:
     filtered_games.sort(key=lambda g: g.get("datetime", ""))
 
     player_stats, game_stats, _, _ = accumulate_stats_from_games(filtered_games)
-    awards = compute_all_awards(player_stats, game_stats)
+
+    # Load globally-cached game_results (with rating_changes) and filter by event dates
+    all_game_results = db.load_analysis_cache(_get_db_path(), "game_results") or []
+    event_game_results = [
+        gr
+        for gr in all_game_results
+        if start_date <= (gr.get("datetime", "") or "")[:10] <= end_date
+    ]
+
+    awards = compute_all_awards(
+        player_stats,
+        game_stats,
+        game_results=event_game_results,
+        min_games_for_win_award=5,
+    )
     _enrich_matchup_handicaps(awards)
     return awards
 
@@ -825,6 +839,8 @@ def set_admin_game_winner(sha256: str, winning_team_id: str) -> Dict[str, Any]:
     processor = _get_processor()
     processor._schedule_rebuild()
 
-    return {"status": "updated", "sha256": sha256, "winning_team_id": str(winning_team_id)}
-
-
+    return {
+        "status": "updated",
+        "sha256": sha256,
+        "winning_team_id": str(winning_team_id),
+    }

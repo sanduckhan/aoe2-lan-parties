@@ -646,26 +646,16 @@ def _compute_apm_award(player_stats):
 
 
 def _compute_most_balanced_matchup(game_stats):
-    MIN_GAMES_FOR_BALANCE = 3
-    relevant = {
-        k: v
-        for k, v in game_stats.get("team_matchups", {}).items()
-        if (v.get("wins_A", 0) + v.get("wins_B", 0)) >= MIN_GAMES_FOR_BALANCE
-    }
-    if not relevant:
-        MIN_GAMES_FOR_BALANCE = 1
-        relevant = {
-            k: v
-            for k, v in game_stats.get("team_matchups", {}).items()
-            if (v.get("wins_A", 0) + v.get("wins_B", 0)) >= MIN_GAMES_FOR_BALANCE
-        }
+    # Min 2 games, both sides must have at least 1 win
     valid = [
         v
-        for v in relevant.values()
+        for v in game_stats.get("team_matchups", {}).values()
         if isinstance(v.get("rosters"), (list, tuple))
         and len(v["rosters"]) == 2
         and isinstance(v["rosters"][0], (list, tuple))
         and isinstance(v["rosters"][1], (list, tuple))
+        and v.get("wins_A", 0) >= 1
+        and v.get("wins_B", 0) >= 1
     ]
     if not valid:
         return None
@@ -681,8 +671,52 @@ def _compute_most_balanced_matchup(game_stats):
     }
 
 
-def compute_all_awards(player_stats, game_stats):
-    """Compute all 8 awards as structured data for the web API."""
+def _compute_cheat_code(player_stats, min_games=60):
+    """Top 3 players by win rate (minimum games threshold)."""
+    entries = []
+    for p, s in player_stats.items():
+        gfwr = s.get("games_for_win_rate", 0)
+        if gfwr < min_games:
+            continue
+        win_rate = round(s["wins"] / gfwr * 100, 1)
+        entries.append(
+            {"player": p, "win_rate": win_rate, "wins": s["wins"], "games": gfwr}
+        )
+    entries.sort(key=lambda x: (x["win_rate"], x["wins"]), reverse=True)
+    return entries[:3]
+
+
+def _compute_rating_movers(game_results):
+    """Compute top 3 rating gainers (stonks) and top 3 rating losers (not_stonks)."""
+    if not game_results:
+        return [], []
+    totals = {}
+    for gr in game_results:
+        rc = gr.get("rating_changes")
+        if not rc:
+            continue
+        for player, delta in rc.items():
+            totals[player] = totals.get(player, 0) + delta
+    stonks = [
+        {"player": p, "rating_gain": round(total, 1)}
+        for p, total in totals.items()
+        if total > 0
+    ]
+    stonks.sort(key=lambda x: x["rating_gain"], reverse=True)
+    not_stonks = [
+        {"player": p, "rating_loss": round(abs(total), 1)}
+        for p, total in totals.items()
+        if total < 0
+    ]
+    not_stonks.sort(key=lambda x: x["rating_loss"], reverse=True)
+    return stonks[:3], not_stonks[:3]
+
+
+def compute_all_awards(
+    player_stats, game_stats, game_results=None, min_games_for_win_award=60
+):
+    """Compute all awards as structured data for the web API."""
+    stonks, not_stonks = _compute_rating_movers(game_results)
     return {
         "favorite_unit_fanatic": _compute_favorite_unit_fanatic(player_stats),
         "bitter_salt_baron": _compute_bitter_salt_baron(player_stats),
@@ -692,6 +726,11 @@ def compute_all_awards(player_stats, game_stats):
         "forgetful_upgrades": _compute_forgetful_upgrades(player_stats),
         "jittery_fingers": _compute_apm_award(player_stats),
         "balanced_matchup": _compute_most_balanced_matchup(game_stats),
+        "cheat_code": _compute_cheat_code(
+            player_stats, min_games=min_games_for_win_award
+        ),
+        "stonks": stonks,
+        "not_stonks": not_stonks,
     }
 
 

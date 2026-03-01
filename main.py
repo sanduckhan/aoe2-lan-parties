@@ -71,7 +71,9 @@ def main():
 
     # Step 7: Save analysis data to SQLite
     analysis_data = {
-        "awards": compute_all_awards(player_stats, game_stats),
+        "awards": compute_all_awards(
+            player_stats, game_stats, game_results=game_results
+        ),
         "general_stats": compute_general_stats(game_stats),
         "game_results": game_results,
         "player_profiles": compute_player_profiles(player_stats, head_to_head),

@@ -191,19 +191,28 @@ def accumulate_stats_from_games(games):
 
         # --- Team matchup stats ---
         if has_winner and len(teams) == 2:
-            team_rosters = []
-            for tid in sorted(teams.keys()):
-                roster = tuple(sorted(p["name"] for p in teams[tid]))
-                team_rosters.append(roster)
-            canonical_rosters = tuple(team_rosters)
-            matchup_key = str(canonical_rosters)
             sorted_tids = sorted(teams.keys())
-            team_a_id = sorted_tids[0]
+            roster_a = tuple(sorted(p["name"] for p in teams[sorted_tids[0]]))
+            roster_b = tuple(sorted(p["name"] for p in teams[sorted_tids[1]]))
+
+            # Canonicalize: sort the two rosters so team order is stable
+            if roster_a > roster_b:
+                roster_a, roster_b = roster_b, roster_a
+                swapped = True
+            else:
+                swapped = False
+
+            canonical_rosters = (roster_a, roster_b)
+            matchup_key = str(canonical_rosters)
 
             if not game_stats["team_matchups"][matchup_key]["rosters"]:
                 game_stats["team_matchups"][matchup_key]["rosters"] = canonical_rosters
 
-            if winning_tid == team_a_id:
+            winner_is_first_tid = winning_tid == sorted_tids[0]
+            if swapped:
+                winner_is_first_tid = not winner_is_first_tid
+
+            if winner_is_first_tid:
                 game_stats["team_matchups"][matchup_key]["wins_A"] += 1
             else:
                 game_stats["team_matchups"][matchup_key]["wins_B"] += 1

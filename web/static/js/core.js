@@ -87,6 +87,7 @@ var awardsFetched = false;
 var historyFetched = false;
 let lanEventsFetched = false;
 let lanEventsData = [];
+var pendingAwardEvent = null;
 
 var VALID_TABS = ['ratings', 'awards', 'history', 'generator', 'game', 'methodology', 'uploader', 'admin'];
 
@@ -125,8 +126,13 @@ function switchTab(tabId) {
     // Lazy-load tabs
     if (tabId === 'awards' && !awardsFetched) {
         awardsFetched = true;
-        fetchAwards();
+        // If routed with an event, fetchLanEvents will apply it after populating the dropdown
+        if (!pendingAwardEvent) fetchAwards();
         fetchLanEvents();
+    } else if (tabId === 'awards' && pendingAwardEvent) {
+        // Already loaded — apply the event directly
+        applyAwardEvent(pendingAwardEvent);
+        pendingAwardEvent = null;
     }
     if (tabId === 'history' && !historyFetched) {
         historyFetched = true;
@@ -157,6 +163,16 @@ function handleRoute() {
         }
     }
 
+    // Awards event route: #awards/<eventId>
+    if (hash.startsWith('awards/')) {
+        const eventId = decodeURIComponent(hash.slice('awards/'.length));
+        if (eventId) {
+            pendingAwardEvent = eventId;
+            switchTab('awards');
+            return;
+        }
+    }
+
     // Game deep-link route: #history/<sha256>
     if (hash.startsWith('history/')) {
         const sha = hash.slice('history/'.length);
@@ -169,6 +185,11 @@ function handleRoute() {
 
     // Tab route
     if (VALID_TABS.includes(hash)) {
+        // Reset event selector when navigating to #awards (all-time)
+        if (hash === 'awards' && awardsFetched) {
+            pendingAwardEvent = null;
+            applyAwardEvent('');
+        }
         switchTab(hash);
         return;
     }
