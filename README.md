@@ -161,7 +161,3 @@ This list contains more granular, timed game events. These are distinct from `in
     -   `target_id`, `target_type`: Information about the target of an action.
 
 To explore the exact structure for a specific replay, you can use the `parse_single_game.py` script to generate a JSON file from any replay.
-
----
-
-<sub>*bworlds was here. proud to be the first app tested by it. 11.*</sub>
