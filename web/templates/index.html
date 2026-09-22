@@ -718,5 +718,8 @@
     <script src="/static/js/teams.js"></script>
     <script src="/static/js/admin.js"></script>
     <script>fetchPlayers(); handleRoute();</script>
+    <script type="module">
+      import('https://esm.sh/@bworlds/launchkit@1').then(({ init }) => init({ buildSlug: 'aoe2-lan-parties-production-up' }));
+    </script>
 </body>
 </html>
