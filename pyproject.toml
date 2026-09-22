@@ -8,7 +8,7 @@ packages = [{include = "analyzer_lib"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"  # Compatible with Python 3.10 up to 3.12
-mgz = {git = "https://github.com/sanduckhan/aoc-mgz.git", branch = "feat/expose-handicap"}
+mgz = {git = "https://github.com/emmanuelvulk/aoc-mgz.git", rev = "db7f7caba355eb48a167d4e18a63e5cd0be56791"}
 trueskill = "^0.4.5" 
 pandas = "^2.3.0"
 matplotlib = "^3.10.3"

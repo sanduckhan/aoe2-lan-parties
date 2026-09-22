@@ -698,9 +698,9 @@ tabulate = ">=0.9.0"
 
 [package.source]
 type = "git"
-url = "https://github.com/sanduckhan/aoc-mgz.git"
-reference = "feat/expose-handicap"
-resolved_reference = "a5e2d60b1f0cd5181821dfc13adf84d059c7f7fc"
+url = "https://github.com/emmanuelvulk/aoc-mgz.git"
+reference = "db7f7caba355eb48a167d4e18a63e5cd0be56791"
+resolved_reference = "db7f7caba355eb48a167d4e18a63e5cd0be56791"
 
 [[package]]
 name = "mypy-extensions"
@@ -1378,4 +1378,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.13"
-content-hash = "eec20c043e9f043c10d79d54dd1d4f95b38b9561118be5a60a3f04019826fb36"
+content-hash = "599032e847730095cf1d74e167fa521fae59506fb0880e58eaf53eecf3a41b8c"

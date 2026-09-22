@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir \
     gunicorn \
     boto3 \
     pandas \
-    git+https://github.com/sanduckhan/aoc-mgz.git@ee49154
+    git+https://github.com/emmanuelvulk/aoc-mgz.git@db7f7caba355eb48a167d4e18a63e5cd0be56791
 
 # Copy application code
 COPY analyzer_lib/ analyzer_lib/

@@ -137,7 +137,7 @@ Standalone utilities that import from `analyzer_lib/`.
 - The `player_ratings` table stores `avg_handicap_last_30` per player (from replay data via forked `mgz` library).
 - Recommended HC = current avg HC + bump for players below 700 rating floor, rounded to nearest 5%.
 - The 700 floor was calibrated for average=1000. The web API passes re-centered ratings (avg=1000) to `recommended_handicap()`, so the floor stays meaningful as "300 below group average" regardless of TrueSkill mu drift.
-- The `mgz` fork at `github.com/sanduckhan/aoc-mgz` (branch `feat/expose-handicap`) exposes `player.handicap` from replay files.
+- The `mgz` fork at `github.com/emmanuelvulk/aoc-mgz` (branch `feat/handicap-and-save-67x`, pinned by commit in `Dockerfile` and `pyproject.toml`) exposes `player.handicap` from replay files and supports save version 67.x.
 
 ### Web UI (`web/`)
 
