@@ -1,6 +1,7 @@
 from functools import wraps
 
 from flask import Flask, Response, jsonify, render_template, request
+from werkzeug.exceptions import HTTPException
 
 from analyzer_lib import config
 from web import services
@@ -18,6 +19,49 @@ def add_cors_headers(response):
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-API-Key"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return response
+
+
+# --- Error pages ---
+
+ERROR_PAGES = {
+    404: (
+        "&#9873;",
+        "Lost in the Fog of War",
+        "The page you were looking for doesn't exist or has moved.",
+        False,
+    ),
+    405: (
+        "&#9873;",
+        "Not Allowed",
+        "This page can't be opened that way.",
+        False,
+    ),
+}
+SERVER_ERROR_PAGE = (
+    "&#9888;",
+    "Something Went Wrong",
+    "The War Council hit an unexpected problem. Please try again in a moment.",
+    True,
+)
+
+
+@app.errorhandler(HTTPException)
+def handle_http_error(e):
+    code = e.code or 500
+    if request.path.startswith("/api/"):
+        # Keep API errors as JSON, matching the endpoints' {"error": ...} shape.
+        return jsonify({"error": e.name}), code
+    if code in ERROR_PAGES:
+        icon, title, message, retry = ERROR_PAGES[code]
+    elif code >= 500:
+        icon, title, message, retry = SERVER_ERROR_PAGE
+    else:
+        icon, title, retry = "&#9873;", e.name, False
+        message = "That request couldn't be completed."
+    html = render_template(
+        "error.html", code=code, icon=icon, title=title, message=message, retry=retry
+    )
+    return html, code
 
 
 # --- Auth ---

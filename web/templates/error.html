@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>{{ title }} — War Council</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/base.css">
+</head>
+<body>
+    <div class="grain-overlay"></div>
+
+    <header>
+        <div class="header-top">
+            <a class="header-title error-home-title" href="/">
+                <span class="header-icon">&#9876;</span>
+                <h1>War Council</h1>
+                <span class="header-subtitle">Age of Empires II &mdash; LAN Party</span>
+            </a>
+        </div>
+    </header>
+
+    <main>
+        <section class="error-page empty-state">
+            <div class="empty-icon">{{ icon | safe }}</div>
+            <h2>{{ title }}</h2>
+            <p>{{ message }}</p>
+            <div class="error-actions">
+                <a class="btn-primary error-link" href="/">Return to the War Council</a>
+                {% if retry %}
+                <a class="btn-secondary error-link" href="{{ request.full_path if request.query_string else request.path }}">Try again</a>
+                {% endif %}
+            </div>
+            <p class="error-code">Error {{ code }}</p>
+        </section>
+    </main>
+</body>
+</html>

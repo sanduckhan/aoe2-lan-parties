@@ -194,8 +194,8 @@ function handleRoute() {
         return;
     }
 
-    // Unknown hash — default to ratings
-    switchTab('ratings');
+    // Unknown hash — show a not-found panel with a way back
+    switchTab('not-found');
 }
 
 window.addEventListener('hashchange', handleRoute);
